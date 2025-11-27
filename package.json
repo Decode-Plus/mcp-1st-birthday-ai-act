@@ -22,7 +22,7 @@
   "devDependencies": {
     "@biomejs/biome": "^1.5.3",
     "@turbo/gen": "^1.10.16",
-    "turbo": "^1.10.16",
+    "turbo": "^2.6.1",
     "typescript": "^5.9.3"
   },
   "pnpm": {
