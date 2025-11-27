@@ -11,6 +11,7 @@ A Model Context Protocol (MCP) server providing organization discovery and AI sy
 - ⚖️ **Compliance Analysis** - Gap analysis with specific Article references from the AI Act
 - 📊 **Risk Classification** - Automated risk categorization (Unacceptable, High, Limited, Minimal)
 - 📝 **Documentation Status** - Track technical documentation and conformity assessment requirements
+- 🧠 **AI-Powered Assessment** - GPT-4 powered compliance assessment with documentation generation
 
 ## Installation
 
@@ -36,6 +37,90 @@ pnpm --filter @eu-ai-act/mcp-server dev
 ```bash
 npm install -g @eu-ai-act/mcp-server
 ```
+
+## Tavily AI Integration
+
+This MCP server uses **Tavily AI** for intelligent company research and organization discovery. Tavily provides AI-powered web search optimized for LLMs and RAG systems.
+
+### Setting up Tavily
+
+1. **Get your Tavily API key** (free tier available):
+   - Visit [https://app.tavily.com](https://app.tavily.com)
+   - Sign up for a free account (1,000 API credits/month)
+   - Copy your API key
+
+2. **Configure the API key**:
+
+   Create a `.env` file in the project root:
+   ```bash
+   TAVILY_API_KEY=tvly-YOUR_API_KEY
+   OPENAI_API_KEY=sk-YOUR_OPENAI_KEY  # Required for assess_compliance tool
+   ```
+
+   Or set as environment variable:
+   ```bash
+   export TAVILY_API_KEY=tvly-YOUR_API_KEY
+   export OPENAI_API_KEY=sk-YOUR_OPENAI_KEY
+   ```
+
+3. **For Claude Desktop**, add the environment variables to your config:
+
+   ```json
+   {
+     "mcpServers": {
+       "eu-ai-act": {
+         "command": "node",
+         "args": ["/path/to/packages/eu-ai-act-mcp/dist/index.js"],
+         "env": {
+           "TAVILY_API_KEY": "tvly-YOUR_API_KEY",
+           "OPENAI_API_KEY": "sk-YOUR_OPENAI_KEY"
+         }
+       }
+     }
+   }
+   ```
+
+### How Tavily Enhances Organization Discovery
+
+The `discover_organization` tool uses Tavily to perform multi-step research:
+
+1. **Company Overview Search** - Discovers business model, products, services
+2. **AI/Technology Search** - Identifies AI capabilities and maturity
+3. **Compliance Search** - Finds existing certifications (GDPR, ISO 27001, etc.)
+
+Tavily's advanced search depth provides:
+- ✅ AI-generated summaries of company information
+- ✅ Reliable source citations from company websites
+- ✅ Automatic extraction of key business details
+- ✅ Real-time web research (not limited to training data)
+
+**Example with Tavily-powered discovery:**
+
+```typescript
+// When TAVILY_API_KEY is set, you get real company research
+const result = await client.callTool({
+  name: "discover_organization",
+  arguments: {
+    organizationName: "OpenAI",
+    domain: "openai.com",
+    context: "AI research company"
+  }
+});
+
+// Result includes real research data:
+// - Actual business sector and size
+// - Real AI maturity assessment
+// - Discovered certifications
+// - Source URLs from Tavily
+```
+
+**Without Tavily**, the tool falls back to mock data for development purposes.
+
+### Tavily Resources
+
+- [Tavily Documentation](https://docs.tavily.com/)
+- [Company Research Use Case](https://docs.tavily.com/examples/use-cases/company-research)
+- [JavaScript SDK Reference](https://docs.tavily.com/sdk/javascript/reference)
 
 ## Usage
 
@@ -265,6 +350,96 @@ Discovers and classifies AI systems within an organization according to EU AI Ac
 - Annex IV (Technical Documentation Requirements)
 - Annex VIII (Registration Information)
 
+### 3. `assess_compliance`
+
+AI-powered compliance assessment and documentation generator using GPT-4.
+
+**Input:**
+```json
+{
+  "organizationContext": { /* from discover_organization */ },
+  "aiServicesContext": { /* from discover_ai_services */ },
+  "focusAreas": ["Technical Documentation", "Risk Management"],
+  "generateDocumentation": true
+}
+```
+
+**Output Schema:**
+```typescript
+{
+  assessment: {
+    overallScore: number;        // 0-100 compliance score
+    riskLevel: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+    gaps: Array<{
+      id: string;
+      severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+      category: string;
+      description: string;
+      affectedSystems: string[];
+      articleReference: string;
+      currentState: string;
+      requiredState: string;
+      remediationEffort: "LOW" | "MEDIUM" | "HIGH";
+      estimatedCost?: string;
+      deadline?: string;
+    }>;
+    recommendations: Array<{
+      id: string;
+      priority: number;          // 1-10 (1 highest)
+      title: string;
+      description: string;
+      articleReference: string;
+      implementationSteps: string[];
+      estimatedEffort: string;
+      expectedOutcome: string;
+      dependencies?: string[];
+    }>;
+    complianceByArticle: Record<string, {
+      compliant: boolean;
+      gaps: string[];
+    }>;
+  };
+  documentation?: {
+    riskManagementTemplate?: string;      // Article 9 - Markdown template
+    technicalDocumentation?: string;       // Article 11 - Markdown template
+    conformityAssessment?: string;         // Article 43 - Markdown template
+    transparencyNotice?: string;           // Article 50 - Markdown template
+    qualityManagementSystem?: string;      // Article 17 - Markdown template
+    humanOversightProcedure?: string;      // Article 14 - Markdown template
+    dataGovernancePolicy?: string;         // Article 10 - Markdown template
+    incidentReportingProcedure?: string;   // Incident reporting template
+  };
+  reasoning: string;             // Chain-of-thought explanation
+  metadata: {
+    assessmentDate: string;
+    assessmentVersion: string;
+    modelUsed: string;           // e.g., "gpt-4o"
+    organizationAssessed?: string;
+    systemsAssessed: string[];
+    focusAreas: string[];
+  };
+}
+```
+
+**EU AI Act References:**
+- Article 9 (Risk Management System)
+- Article 10 (Data Governance)
+- Article 11 (Technical Documentation)
+- Article 12 (Record-Keeping)
+- Article 13 (Transparency)
+- Article 14 (Human Oversight)
+- Article 15 (Accuracy, Robustness, Cybersecurity)
+- Article 17 (Quality Management System)
+- Article 43 (Conformity Assessment)
+- Article 49 (EU Database Registration)
+- Article 50 (Transparency Obligations)
+- Annex IV (Technical Documentation Requirements)
+
+**Requirements:**
+- `OPENAI_API_KEY` environment variable must be set
+- Uses GPT-4o for intelligent compliance analysis
+- Generates professional documentation templates in Markdown
+
 ## Testing
 
 Run the test agent to verify the MCP server:
@@ -279,7 +454,9 @@ The test agent will:
 2. List available tools
 3. Test organization discovery
 4. Test AI services discovery
-5. Display compliance gaps and recommendations
+5. Test AI-powered compliance assessment (requires `OPENAI_API_KEY`)
+6. Display compliance gaps and recommendations
+7. Show generated documentation templates
 
 ## ChatGPT App Deployment
 
@@ -349,6 +526,11 @@ app.listen(3000, () => {
          │  │  discover_          │    │
          │  │  ai_services        │    │
          │  └─────────────────────┘    │
+         │                             │
+         │  ┌─────────────────────┐    │
+         │  │  assess_            │◄──┼──── OpenAI GPT-4
+         │  │  compliance         │    │
+         │  └─────────────────────┘    │
          └─────────────────────────────┘
 ```
 
@@ -366,8 +548,9 @@ packages/eu-ai-act-mcp/
 │   ├── schemas/
 │   │   └── index.ts          # Zod validation schemas
 │   └── tools/
-│       ├── discover-organization.ts
-│       └── discover-ai-services.ts
+│       ├── discover-organization.ts   # Tavily-powered org discovery
+│       ├── discover-ai-services.ts    # AI systems inventory
+│       └── assess-compliance.ts       # GPT-4 compliance assessment
 ├── package.json
 ├── tsconfig.json
 └── README.md
@@ -389,12 +572,12 @@ This MCP server implements compliance tools based on:
 
 ### Key Implementation Timeline
 
-| Date | Requirement | Articles |
-|------|-------------|----------|
-| Feb 2, 2025 | Prohibited AI practices | Article 5 |
-| Aug 2, 2025 | GPAI model obligations | Article 53 |
+| Date        | Requirement                             | Articles       |
+| ----------- | --------------------------------------- | -------------- |
+| Feb 2, 2025 | Prohibited AI practices                 | Article 5      |
+| Aug 2, 2025 | GPAI model obligations                  | Article 53     |
 | Aug 2, 2026 | High-risk systems obligations (limited) | Articles 16-29 |
-| Aug 2, 2027 | Full AI Act enforcement | All Articles |
+| Aug 2, 2027 | Full AI Act enforcement                 | All Articles   |
 
 ### Supported Risk Categories
 

@@ -231,11 +231,50 @@ Takes organization and service context to produce:
   "mcpServers": {
     "eu-ai-act": {
       "command": "npx",
-      "args": ["@eu-ai-act/mcp-server"]
+      "args": ["@eu-ai-act/mcp-server"],
+      "env": {
+        "TAVILY_API_KEY": "tvly-YOUR_API_KEY"
+      }
     }
   }
 }
 ```
+
+### 🔍 Tavily AI-Powered Company Research
+
+The MCP server now integrates with **[Tavily AI](https://tavily.com)** for intelligent, real-time company research during organization discovery. This enhancement transforms the `discover_organization` tool from mock data to **live web research**.
+
+#### Why Tavily?
+
+- **🎯 Optimized for LLMs** — Search results designed for AI agents and RAG systems
+- **📊 Comprehensive Data** — Multi-step research (overview, AI capabilities, compliance)
+- **✅ Source Citations** — Reliable URLs and AI-generated summaries
+- **⚡ Fast & Efficient** — Advanced search depth with minimal API credits
+
+#### What It Discovers:
+
+| Research Area | Information Extracted | EU AI Act Mapping |
+|--------------|----------------------|-------------------|
+| **Company Overview** | Business model, sector, size, headquarters | Article 16 (Provider obligations) |
+| **AI Capabilities** | AI maturity level, ML/AI technologies, products | Article 6 (Risk classification) |
+| **Compliance Status** | ISO certifications, GDPR compliance, QMS | Article 17 (Quality management) |
+| **EU Presence** | Jurisdictions, European operations | Article 22 (Authorized representative) |
+
+#### Setup:
+
+1. Get free API key from [app.tavily.com](https://app.tavily.com) (1,000 credits/month)
+2. Set environment variable: `TAVILY_API_KEY=tvly-YOUR_API_KEY`
+3. Run organization discovery — it now uses real company research!
+
+**Example:**
+```typescript
+// With Tavily: Real company research with 90+ completeness score
+discover_organization("OpenAI", "openai.com", "AI research company")
+
+// Returns: Actual sector, real AI maturity, discovered certifications, source URLs
+```
+
+📖 **[See detailed examples →](packages/eu-ai-act-mcp/TAVILY_EXAMPLE.md)**
 
 ---
 

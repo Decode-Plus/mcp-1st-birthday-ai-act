@@ -3,8 +3,17 @@
  * Demonstrates MCP server usage and validates functionality
  */
 
+import { config } from "dotenv";
+import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+
+// Load .env from workspace root
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const rootEnvPath = resolve(__dirname, "../../../.env");
+config({ path: rootEnvPath });
 
 /**
  * Test the MCP Server
@@ -45,14 +54,13 @@ async function testMCPServer() {
   }
   console.log();
 
-  // Test 2: Discover Organization
-  console.log("🏢 Test 2: Discovering organization...");
+  // Test 2: Discover Organization (domain auto-discovery)
+  console.log("🏢 Test 2: Discovering organization (domain auto-discovered from research)...");
   const orgResult = await client.callTool({
     name: "discover_organization",
     arguments: {
-      organizationName: "Acme AI Solutions GmbH",
-      domain: "acme-ai.de",
-      context: "German AI startup focused on healthcare solutions",
+      organizationName: "IBM",
+      context: "A technology company that provides AI and consulting solutions",
     },
   });
 
@@ -78,6 +86,7 @@ async function testMCPServer() {
       arguments: {
         organizationContext: orgData,
         scope: "all",
+        systemNames: ["watson ai"],
       },
     });
 
@@ -125,6 +134,118 @@ async function testMCPServer() {
         console.log(`    Human Oversight: ${system.technicalDetails.humanOversight.enabled ? "Yes" : "No"}`);
         if (system.riskClassification.annexIIICategory) {
           console.log(`    Annex III Category: ${system.riskClassification.annexIIICategory}`);
+        }
+      }
+
+      // Test 4: Compliance Assessment with AI
+      console.log("\n📋 Test 4: Running AI-powered compliance assessment...");
+      console.log("   (This requires OPENAI_API_KEY to be set)");
+      
+      try {
+        const complianceResult = await client.callTool({
+          name: "assess_compliance",
+          arguments: {
+            organizationContext: orgData,
+            aiServicesContext: servicesData,
+            focusAreas: ["Technical Documentation", "Risk Management", "Conformity Assessment"],
+            generateDocumentation: true,
+          },
+        });
+
+        if (complianceResult.content && Array.isArray(complianceResult.content) && complianceResult.content[0]?.type === "text") {
+          const complianceData = JSON.parse(complianceResult.content[0].text);
+          
+          console.log("\n🎯 Compliance Assessment Results:");
+          console.log(`  Overall Score: ${complianceData.assessment.overallScore}/100`);
+          console.log(`  Risk Level: ${complianceData.assessment.riskLevel}`);
+          console.log(`  Total Gaps: ${complianceData.assessment.gaps.length}`);
+          console.log(`  Recommendations: ${complianceData.assessment.recommendations.length}`);
+          console.log();
+
+          // Display gaps by severity
+          const criticalGaps = complianceData.assessment.gaps.filter((g: any) => g.severity === "CRITICAL");
+          const highGaps = complianceData.assessment.gaps.filter((g: any) => g.severity === "HIGH");
+          const mediumGaps = complianceData.assessment.gaps.filter((g: any) => g.severity === "MEDIUM");
+          const lowGaps = complianceData.assessment.gaps.filter((g: any) => g.severity === "LOW");
+
+          console.log("📊 Gap Analysis:");
+          console.log(`  🔴 CRITICAL: ${criticalGaps.length}`);
+          console.log(`  🟠 HIGH: ${highGaps.length}`);
+          console.log(`  🟡 MEDIUM: ${mediumGaps.length}`);
+          console.log(`  🟢 LOW: ${lowGaps.length}`);
+          console.log();
+
+          // Display top 3 critical/high gaps
+          const topGaps = [...criticalGaps, ...highGaps].slice(0, 3);
+          if (topGaps.length > 0) {
+            console.log("⚠️  Top Priority Gaps:");
+            for (const gap of topGaps) {
+              console.log(`\n  [${gap.severity}] ${gap.category}`);
+              console.log(`    Description: ${gap.description.substring(0, 100)}...`);
+              console.log(`    Article: ${gap.articleReference}`);
+              console.log(`    Effort: ${gap.remediationEffort}`);
+            }
+            console.log();
+          }
+
+          // Display top 3 recommendations
+          if (complianceData.assessment.recommendations.length > 0) {
+            console.log("💡 Top Recommendations:");
+            const sortedRecs = [...complianceData.assessment.recommendations].sort((a: any, b: any) => a.priority - b.priority);
+            for (const rec of sortedRecs.slice(0, 3)) {
+              console.log(`\n  Priority ${rec.priority}: ${rec.title}`);
+              console.log(`    Article: ${rec.articleReference}`);
+              console.log(`    Effort: ${rec.estimatedEffort}`);
+              console.log(`    Steps: ${rec.implementationSteps.length} implementation steps`);
+            }
+            console.log();
+          }
+
+          // Display compliance by article
+          console.log("📖 Compliance by EU AI Act Article:");
+          for (const [article, status] of Object.entries(complianceData.assessment.complianceByArticle)) {
+            const articleStatus = status as { compliant: boolean; gaps: string[] };
+            const statusIcon = articleStatus.compliant ? "✅" : "❌";
+            console.log(`  ${statusIcon} ${article}: ${articleStatus.compliant ? "Compliant" : `${articleStatus.gaps.length} gap(s)`}`);
+          }
+          console.log();
+
+          // Display documentation templates summary
+          if (complianceData.documentation) {
+            console.log("📄 Generated Documentation Templates:");
+            const docs = complianceData.documentation;
+            if (docs.riskManagementTemplate) console.log("  ✅ Risk Management System (Article 9)");
+            if (docs.technicalDocumentation) console.log("  ✅ Technical Documentation (Article 11)");
+            if (docs.conformityAssessment) console.log("  ✅ Conformity Assessment (Article 43)");
+            if (docs.transparencyNotice) console.log("  ✅ Transparency Notice (Article 50)");
+            if (docs.qualityManagementSystem) console.log("  ✅ Quality Management System (Article 17)");
+            if (docs.humanOversightProcedure) console.log("  ✅ Human Oversight Procedure (Article 14)");
+            if (docs.dataGovernancePolicy) console.log("  ✅ Data Governance Policy (Article 10)");
+            if (docs.incidentReportingProcedure) console.log("  ✅ Incident Reporting Procedure");
+            console.log();
+          }
+
+          // Display reasoning summary
+          if (complianceData.reasoning) {
+            console.log("🧠 AI Reasoning Summary:");
+            const reasoningPreview = complianceData.reasoning.substring(0, 500);
+            console.log(`  ${reasoningPreview}${complianceData.reasoning.length > 500 ? "..." : ""}`);
+            console.log();
+          }
+
+          // Display metadata
+          console.log("📋 Assessment Metadata:");
+          console.log(`  Assessment Date: ${complianceData.metadata.assessmentDate}`);
+          console.log(`  Model Used: ${complianceData.metadata.modelUsed}`);
+          console.log(`  Systems Assessed: ${complianceData.metadata.systemsAssessed.join(", ")}`);
+          console.log(`  Focus Areas: ${complianceData.metadata.focusAreas.join(", ")}`);
+        }
+      } catch (complianceError: any) {
+        if (complianceError.message?.includes("OPENAI_API_KEY")) {
+          console.log("⚠️  Skipping compliance assessment: OPENAI_API_KEY not set");
+          console.log("   Set OPENAI_API_KEY environment variable to enable AI-powered compliance assessment");
+        } else {
+          console.error("❌ Compliance assessment failed:", complianceError.message);
         }
       }
     }
