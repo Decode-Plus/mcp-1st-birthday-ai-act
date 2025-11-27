@@ -1,0 +1,41 @@
+{
+  "name": "@eu-ai-act/agent",
+  "version": "0.1.0",
+  "description": "EU AI Act Compliance Agent with Gradio UI and Vercel AI SDK v5",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsup",
+    "start": "node dist/server.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "gradio": "uv run src/gradio_app.py"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.23.0",
+    "ai": "^5.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^4.21.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.5",
+    "@types/node": "^22.10.2",
+    "tsup": "^8.5.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  },
+  "keywords": [
+    "eu-ai-act",
+    "compliance",
+    "ai-agent",
+    "gradio",
+    "vercel-ai-sdk"
+  ],
+  "license": "MIT"
+}

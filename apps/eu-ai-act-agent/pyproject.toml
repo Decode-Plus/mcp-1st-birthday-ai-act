@@ -1,0 +1,21 @@
+[project]
+name = "eu-ai-act-agent"
+version = "0.1.0"
+description = "EU AI Act Compliance Agent with Gradio UI"
+requires-python = ">=3.9"
+dependencies = [
+    "gradio>=5.9.1",
+    "requests>=2.31.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.scripts]
+gradio = "gradio_app:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+dev-dependencies = []
+

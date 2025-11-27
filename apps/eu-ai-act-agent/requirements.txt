@@ -1,0 +1,7 @@
+# EU AI Act Compliance Agent - Python Dependencies
+# Gradio UI requirements
+
+gradio>=5.9.1
+requests>=2.31.0
+python-dotenv>=1.0.0
+

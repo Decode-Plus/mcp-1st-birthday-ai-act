@@ -1,29 +1,474 @@
 /**
  * Organization Discovery Tool
  * Implements EU AI Act Article 16 and Article 49 requirements
- * Uses research to discover organization details and regulatory context
+ * Uses Tavily AI-powered research to discover organization details and regulatory context
  */
 
+import { tavily } from "@tavily/core";
 import type {
   OrganizationProfile,
   DiscoverOrganizationInput,
 } from "../types/index.js";
 
 /**
- * Mock research function - In production, this would integrate with:
- * - Company databases (Companies House, etc.)
- * - Web scraping/research APIs
- * - Public registries
- * - AI Act registration database
+ * Extract domain from URL
+ */
+function extractDomainFromUrl(url: string): string | undefined {
+  try {
+    const urlObj = new URL(url);
+    return urlObj.hostname;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Find company domain from search results
+ */
+function findCompanyDomain(searchResults: any, companyName: string): string | undefined {
+  const results = searchResults.results || [];
+  
+  // Look for official company website in results
+  for (const result of results) {
+    const url = result.url?.toLowerCase() || "";
+    const title = result.title?.toLowerCase() || "";
+    
+    // Check if this looks like an official company website
+    if (title.includes("official") || title.includes("about") || url.includes("/about")) {
+      const domain = extractDomainFromUrl(result.url);
+      if (domain && !domain.includes("linkedin") && !domain.includes("wiki") && !domain.includes("news")) {
+        console.error(`🌐 Found official company domain: ${domain}`);
+        return domain;
+      }
+    }
+  }
+  
+  // If no official website found, try to find main company domain
+  for (const result of results) {
+    const url = result.url?.toLowerCase() || "";
+    const domain = extractDomainFromUrl(result.url);
+    
+    // Skip knowledge bases, wikis, news sites
+    if (domain && !domain.includes("linkedin") && !domain.includes("wiki") && !domain.includes("news") && 
+        !domain.includes("ebsco") && !domain.includes("globaldata")) {
+      console.error(`🌐 Found company domain from search: ${domain}`);
+      return domain;
+    }
+  }
+  
+  return undefined;
+}
+
+/**
+ * Extract comprehensive organization data from Tavily search results
+ * Extracts all fields needed for enrichWithAIActContext
+ */
+function extractComprehensiveData(
+  name: string,
+  domain: string | undefined,
+  searchResults: any
+): Partial<OrganizationProfile> {
+  const answer = searchResults.answer || "";
+  const results = searchResults.results || [];
+  const allContent = answer.toLowerCase() + results.map((r: any) => r.content).join(" ").toLowerCase();
+  
+  console.error("\n📊 Tavily Data Extraction Log:");
+  console.error("=" .repeat(60));
+  console.error(`Company: ${name}`);
+  console.error(`Domain: ${domain || "Not provided"}`);
+  console.error(`Answer length: ${answer.length} chars`);
+  console.error(`Results count: ${results.length}`);
+  console.error("-".repeat(60));
+  
+  // Extract registration number (VAT, company registration)
+  let registrationNumber: string | undefined;
+  const regPatterns = [
+    /vat\s*(?:number|id|registration)?[:\s]+([A-Z0-9\-]+)/i,
+    /company\s*(?:registration|reg\.?|number)[:\s]+([A-Z0-9\-]+)/i,
+    /registration\s*(?:number|no\.?)[:\s]+([A-Z0-9\-]+)/i,
+    /\b([A-Z]{2}\d{8,})\b/, // EU VAT format
+  ];
+  
+  for (const pattern of regPatterns) {
+    const match = allContent.match(pattern);
+    if (match) {
+      registrationNumber = match[1];
+      console.error(`✅ Registration Number found: ${registrationNumber}`);
+      break;
+    }
+  }
+  if (!registrationNumber) {
+    console.error("❌ Registration Number: Not found");
+  }
+  
+  // Extract headquarters location
+  let headquartersCountry = "Unknown";
+  let headquartersCity = "Unknown";
+  let headquartersAddress: string | undefined;
+  
+  const countryPatterns = [
+    /headquarters?[:\s]+(?:in|at|located in)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/,
+    /based\s+in\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/,
+    /located\s+in\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/,
+  ];
+  
+  for (const pattern of countryPatterns) {
+    const match = answer.match(pattern);
+    if (match) {
+      const location = match[1];
+      if (location.includes("United States") || location.includes("USA") || location.includes("U.S.")) {
+        headquartersCountry = "United States";
+      } else if (location.includes("United Kingdom") || location.includes("UK")) {
+        headquartersCountry = "United Kingdom";
+      } else if (location.match(/\b(Germany|France|Spain|Italy|Netherlands|Belgium|Austria|Sweden|Denmark|Poland|Portugal|Finland|Ireland|Czech|Romania|Greece|Hungary|Slovakia|Bulgaria|Croatia|Lithuania|Slovenia|Latvia|Estonia|Luxembourg|Malta|Cyprus)\b/i)) {
+        headquartersCountry = location;
+      } else {
+        headquartersCountry = location;
+      }
+      console.error(`✅ Headquarters Country: ${headquartersCountry}`);
+      break;
+    }
+  }
+  
+  const cityPatterns = [
+    /headquarters?[:\s]+(?:in|at)\s+([A-Z][a-z]+),?\s+(?:[A-Z][a-z]+)/,
+    /based\s+in\s+([A-Z][a-z]+),/,
+    /located\s+in\s+([A-Z][a-z]+),/,
+  ];
+  
+  for (const pattern of cityPatterns) {
+    const match = answer.match(pattern);
+    if (match) {
+      headquartersCity = match[1];
+      console.error(`✅ Headquarters City: ${headquartersCity}`);
+      break;
+    }
+  }
+  
+  if (headquartersCountry === "Unknown") {
+    console.error("❌ Headquarters Country: Not found");
+  }
+  if (headquartersCity === "Unknown") {
+    console.error("❌ Headquarters City: Not found");
+  }
+  
+  // Extract contact information
+  const emailPattern = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/;
+  const emailMatch = allContent.match(emailPattern);
+  const email = emailMatch ? emailMatch[1] : (domain ? `contact@${domain}` : "unknown@example.com");
+  console.error(`✅ Contact Email: ${email}`);
+  
+  const phonePattern = /(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/;
+  const phoneMatch = allContent.match(phonePattern);
+  const phone = phoneMatch ? phoneMatch[0] : undefined;
+  if (phone) {
+    console.error(`✅ Contact Phone: ${phone}`);
+  } else {
+    console.error("❌ Contact Phone: Not found");
+  }
+  
+  const websiteUrl = domain ? `https://${domain}` : results[0]?.url || undefined;
+  if (websiteUrl) {
+    console.error(`✅ Website: ${websiteUrl}`);
+  }
+  
+  // Extract sector - look for company type indicators
+  let sector = "Technology"; // default
+  
+  // Look for explicit company type mentions
+  if (allContent.includes("technology company") || allContent.includes("tech company") || 
+      allContent.includes("software company") || allContent.includes("it services") ||
+      allContent.includes("information technology") || allContent.includes("computer") ||
+      allContent.includes("semiconductor") || allContent.includes("cloud computing") ||
+      allContent.includes("artificial intelligence") || allContent.includes("ai company")) {
+    sector = "Technology";
+  } else if (allContent.includes("healthcare company") || allContent.includes("medical company") ||
+             allContent.includes("pharmaceutical") || allContent.includes("biotech") ||
+             allContent.includes("life sciences")) {
+    sector = "Healthcare";
+  } else if (allContent.includes("financial services") || allContent.includes("banking company") ||
+             allContent.includes("insurance company") || allContent.includes("financial company") ||
+             allContent.includes("investment") && allContent.includes("company")) {
+    sector = "Financial Services";
+  } else if (allContent.includes("retail company") || allContent.includes("e-commerce company") ||
+             allContent.includes("retail business")) {
+    sector = "Retail";
+  } else if (allContent.includes("manufacturing company") || allContent.includes("industrial")) {
+    sector = "Manufacturing";
+  } else if (allContent.includes("education company") || allContent.includes("educational") ||
+             allContent.includes("university") || allContent.includes("school")) {
+    sector = "Education";
+  } else if (allContent.includes("media company") || allContent.includes("entertainment")) {
+    sector = "Media & Entertainment";
+  } else if (allContent.includes("energy company") || allContent.includes("oil") && allContent.includes("gas")) {
+    sector = "Energy";
+  } else if (allContent.includes("telecommunications") || allContent.includes("telecom")) {
+    sector = "Telecommunications";
+  } else if (allContent.includes("automotive") || allContent.includes("car")) {
+    sector = "Automotive";
+  }
+  // Fallback: if only generic mentions exist, keep default Technology
+  console.error(`✅ Sector: ${sector}`);
+  
+  // Extract EU presence
+  const hasEUPresence = allContent.includes("europe") || 
+                        allContent.includes("eu ") || 
+                        allContent.includes("european") ||
+                        allContent.includes("gdpr") ||
+                        headquartersCountry.match(/\b(Germany|France|Spain|Italy|Netherlands|Belgium|Austria|Sweden|Denmark|Poland|Portugal|Finland|Ireland|Czech|Romania|Greece|Hungary|Slovakia|Bulgaria|Croatia|Lithuania|Slovenia|Latvia|Estonia|Luxembourg|Malta|Cyprus)\b/i);
+  console.error(`✅ EU Presence: ${hasEUPresence}`);
+  
+  // Extract jurisdiction
+  const jurisdictions: string[] = [];
+  if (hasEUPresence) jurisdictions.push("EU");
+  if (allContent.includes("united states") || allContent.includes("usa") || allContent.includes("u.s.")) {
+    jurisdictions.push("United States");
+  }
+  if (allContent.includes("united kingdom") || allContent.includes("uk")) {
+    jurisdictions.push("United Kingdom");
+  }
+  if (jurisdictions.length === 0) jurisdictions.push("Unknown");
+  console.error(`✅ Jurisdictions: ${jurisdictions.join(", ")}`);
+  
+  // Extract company size
+  let size: "Startup" | "SME" | "Enterprise" = "SME";
+  if (allContent.includes("startup") || allContent.includes("founded recently")) {
+    size = "Startup";
+  } else if (allContent.includes("enterprise") || allContent.includes("fortune 500") || 
+             allContent.includes("multinational") || allContent.includes("global corporation") ||
+             allContent.includes("large company")) {
+    size = "Enterprise";
+  }
+  console.error(`✅ Company Size: ${size}`);
+  
+  // Extract AI maturity
+  let aiMaturityLevel: "Nascent" | "Developing" | "Mature" | "Leader" = "Developing";
+  if (allContent.includes("ai leader") || allContent.includes("ai pioneer") || allContent.includes("leading ai")) {
+    aiMaturityLevel = "Leader";
+  } else if (allContent.includes("ai-powered") || allContent.includes("machine learning") || allContent.includes("deep learning")) {
+    aiMaturityLevel = "Mature";
+  } else if (allContent.includes("exploring ai") || allContent.includes("starting ai")) {
+    aiMaturityLevel = "Nascent";
+  }
+  console.error(`✅ AI Maturity Level: ${aiMaturityLevel}`);
+  
+  // Extract certifications
+  const certifications: string[] = [];
+  if (allContent.includes("iso 27001")) certifications.push("ISO 27001");
+  if (allContent.includes("iso 27701")) certifications.push("ISO 27701");
+  if (allContent.includes("iso 9001")) certifications.push("ISO 9001");
+  if (allContent.includes("soc 2")) certifications.push("SOC 2");
+  if (allContent.includes("gdpr")) certifications.push("GDPR Compliant");
+  if (allContent.includes("hipaa")) certifications.push("HIPAA");
+  console.error(`✅ Certifications: ${certifications.length > 0 ? certifications.join(", ") : "None found"}`);
+  
+  // Extract quality management system
+  const hasQMS = allContent.includes("quality management") || 
+                 allContent.includes("iso 9001") ||
+                 allContent.includes("qms");
+  console.error(`✅ Quality Management System: ${hasQMS}`);
+  
+  // Extract risk management system
+  const hasRMS = allContent.includes("risk management") || 
+                 allContent.includes("risk management system") ||
+                 allContent.includes("enterprise risk management");
+  console.error(`✅ Risk Management System: ${hasRMS}`);
+  
+  // Extract authorized representative (for non-EU companies)
+  const hasAuthorizedRep = allContent.includes("authorized representative") ||
+                           allContent.includes("eu representative");
+  console.error(`✅ Authorized Representative: ${hasAuthorizedRep || "Not found"}`);
+  
+  // Extract notified body ID
+  let notifiedBodyId: string | undefined;
+  const notifiedBodyPattern = /notified\s+body[:\s]+([A-Z0-9\-]+)/i;
+  const notifiedMatch = allContent.match(notifiedBodyPattern);
+  if (notifiedMatch) {
+    notifiedBodyId = notifiedMatch[1];
+    console.error(`✅ Notified Body ID: ${notifiedBodyId}`);
+  } else {
+    console.error("❌ Notified Body ID: Not found");
+  }
+  
+  console.error("=" .repeat(60));
+  console.error("📊 Extraction Complete\n");
+  
+  return {
+    organization: {
+      name,
+      registrationNumber,
+      sector,
+      size,
+      jurisdiction: jurisdictions,
+      euPresence: !!hasEUPresence,
+      headquarters: {
+        country: headquartersCountry,
+        city: headquartersCity,
+        address: headquartersAddress,
+      },
+      contact: {
+        email,
+        phone,
+        website: websiteUrl,
+      },
+      aiMaturityLevel,
+      aiSystemsCount: 0,
+      primaryRole: "Provider",
+    },
+    regulatoryContext: {
+      applicableFrameworks: ["EU AI Act", "GDPR"],
+      complianceDeadlines: [], // Will be populated in researchOrganization
+      existingCertifications: certifications,
+      hasAuthorizedRepresentative: hasAuthorizedRep || undefined,
+      notifiedBodyId,
+      hasQualityManagementSystem: hasQMS,
+      hasRiskManagementSystem: hasRMS,
+    },
+  };
+}
+
+/**
+ * Research organization using Tavily AI search
+ * Performs comprehensive company research with a single advanced search
  */
 async function researchOrganization(
   name: string,
   domain?: string,
   context?: string
 ): Promise<Partial<OrganizationProfile>> {
-  // This is a mock implementation
-  // In production, you would integrate with Tavily or similar research API
+  const apiKey = process.env.TAVILY_API_KEY;
   
+  if (!apiKey) {
+    console.warn("TAVILY_API_KEY not set, using fallback mock data");
+    return createFallbackProfile(name, domain);
+  }
+  
+  try {
+    const client = tavily({ apiKey });
+    
+    // Comprehensive single search query to get all needed information
+    const comprehensiveQuery = `${name} company overview headquarters location contact information registration number VAT business model products services AI artificial intelligence machine learning technology GDPR compliance certifications ISO 27001 ISO 9001 quality management system risk management system authorized representative EU regulations${context ? ` ${context}` : ""}`;
+    
+    console.error("\n🔍 Starting Tavily Comprehensive Search:");
+    console.error(`Organization: ${name}`);
+    console.error(`Query: ${comprehensiveQuery.substring(0, 100)}...`);
+    
+    const searchResults = await client.search(comprehensiveQuery, {
+      searchDepth: "advanced",
+      maxResults: 10,
+      includeAnswer: true,
+    });
+    
+    console.error("\n✅ Tavily Search Complete");
+    console.error(`Answer length: ${searchResults.answer?.length || 0} characters`);
+    console.error(`Results found: ${searchResults.results?.length || 0}`);
+    console.error(`Sources: ${searchResults.results?.slice(0, 3).map((r: any) => r.url).join(", ") || "None"}`);
+    
+    // Auto-discover domain if not provided
+    let discoveredDomain = domain;
+    if (!discoveredDomain) {
+      console.error("\n🔎 Auto-discovering company domain from search results...");
+      discoveredDomain = findCompanyDomain(searchResults, name);
+    } else {
+      console.error(`\n✅ Using provided domain: ${discoveredDomain}`);
+    }
+    
+    const now = new Date().toISOString();
+    
+    // Extract all comprehensive data from single search
+    const extractedData = extractComprehensiveData(name, discoveredDomain, searchResults);
+    
+    const completenessScore = calculateCompletenessScore(searchResults);
+    
+    return {
+      organization: {
+        ...extractedData.organization,
+        name: extractedData.organization?.name || name,
+        sector: extractedData.organization?.sector || "Technology",
+        size: extractedData.organization?.size || "SME",
+        jurisdiction: extractedData.organization?.jurisdiction || ["Unknown"],
+        euPresence: extractedData.organization?.euPresence ?? false,
+        headquarters: extractedData.organization?.headquarters || { country: "Unknown", city: "Unknown" },
+        contact: {
+          email: extractedData.organization?.contact?.email || "unknown@example.com",
+          phone: extractedData.organization?.contact?.phone,
+          website: extractedData.organization?.contact?.website,
+        },
+        aiMaturityLevel: extractedData.organization?.aiMaturityLevel || "Developing",
+        aiSystemsCount: extractedData.organization?.aiSystemsCount || 0,
+        primaryRole: extractedData.organization?.primaryRole || "Provider",
+      },
+      regulatoryContext: {
+        applicableFrameworks: ["EU AI Act", "GDPR"],
+        complianceDeadlines: [
+          {
+            date: "2025-02-02",
+            description: "Prohibited AI practices ban (Article 5)",
+            article: "Article 5",
+          },
+          {
+            date: "2025-08-02",
+            description: "GPAI model obligations (Article 53)",
+            article: "Article 53",
+          },
+          {
+            date: "2027-08-02",
+            description: "Full AI Act enforcement for high-risk systems",
+            article: "Article 113",
+          },
+        ],
+        existingCertifications: extractedData.regulatoryContext?.existingCertifications || [],
+        hasAuthorizedRepresentative: extractedData.regulatoryContext?.hasAuthorizedRepresentative,
+        notifiedBodyId: extractedData.regulatoryContext?.notifiedBodyId,
+        hasQualityManagementSystem: extractedData.regulatoryContext?.hasQualityManagementSystem ?? false,
+        hasRiskManagementSystem: extractedData.regulatoryContext?.hasRiskManagementSystem ?? false,
+      },
+      metadata: {
+        createdAt: now,
+        lastUpdated: now,
+        completenessScore,
+        dataSource: "tavily-research",
+        tavilyResults: {
+          overview: searchResults.answer || "No overview available",
+          aiCapabilities: searchResults.answer || "No AI information found",
+          compliance: searchResults.answer || "No compliance information found",
+          sources: searchResults.results?.slice(0, 5).map((r: any) => r.url) || [],
+        },
+      },
+    };
+  } catch (error) {
+    console.error("❌ Tavily research error:", error);
+    return createFallbackProfile(name, domain);
+  }
+}
+
+/**
+ * Calculate completeness score based on search results quality
+ */
+function calculateCompletenessScore(
+  searchResults: any
+): number {
+  let score = 50; // base score
+  
+  if (searchResults.results?.length > 0) {
+    score += 20;
+    // Bonus for more results
+    if (searchResults.results.length >= 5) score += 10;
+    if (searchResults.results.length >= 10) score += 10;
+  }
+  if (searchResults.answer) {
+    score += 10;
+    // Bonus for longer, more detailed answers
+    if (searchResults.answer.length > 500) score += 10;
+  }
+  
+  return Math.min(score, 100);
+}
+
+/**
+ * Fallback profile when Tavily is not available
+ */
+function createFallbackProfile(name: string, domain?: string): Partial<OrganizationProfile> {
   const now = new Date().toISOString();
   
   return {
@@ -31,14 +476,14 @@ async function researchOrganization(
       name,
       sector: "Technology",
       size: "SME",
-      jurisdiction: ["EU", "United States"],
+      jurisdiction: ["EU"],
       euPresence: true,
       headquarters: {
-        country: "Germany",
-        city: "Berlin",
+        country: "Unknown",
+        city: "Unknown",
       },
       contact: {
-        email: `contact@${domain || "example.com"}`,
+        email: domain ? `contact@${domain}` : "unknown@example.com",
         website: domain ? `https://${domain}` : undefined,
       },
       aiMaturityLevel: "Developing",
@@ -46,7 +491,7 @@ async function researchOrganization(
       primaryRole: "Provider",
     },
     regulatoryContext: {
-      applicableFrameworks: ["EU AI Act", "GDPR", "ISO 27001"],
+      applicableFrameworks: ["EU AI Act", "GDPR"],
       complianceDeadlines: [
         {
           date: "2025-02-02",
@@ -71,8 +516,8 @@ async function researchOrganization(
     metadata: {
       createdAt: now,
       lastUpdated: now,
-      completenessScore: 60,
-      dataSource: "automated-discovery",
+      completenessScore: 40,
+      dataSource: "fallback-mock",
     },
   };
 }
@@ -149,6 +594,8 @@ export async function discoverOrganization(
     domain,
     context
   );
+
+  console.error("Raw result:", JSON.stringify(researchedData, null, 2));
 
   // Step 2: Enrich with AI Act context
   const enrichedProfile = enrichWithAIActContext(researchedData);

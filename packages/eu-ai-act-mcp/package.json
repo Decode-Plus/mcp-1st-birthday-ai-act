@@ -8,6 +8,12 @@
   "bin": {
     "eu-ai-act-mcp": "./dist/index.js"
   },
+  "exports": {
+    ".": "./dist/index.js",
+    "./tools/*": "./dist/tools/*.js",
+    "./types": "./dist/types/index.js",
+    "./schemas": "./dist/schemas/index.js"
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsup",
@@ -17,17 +23,18 @@
     "lint:fix": "biome check --write ."
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.4",
-    "ai": "^4.0.31",
+    "@ai-sdk/openai": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.23.0",
+    "@tavily/core": "^0.5.13",
+    "ai": "^5.0.0",
+    "openai": "^4.77.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@biomejs/biome": "^1.9.4",
     "@types/express": "^5.0.5",
     "@types/node": "^22.10.2",
-    "tsup": "^8.3.5",
-    "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "tsup": "^8.5.1",
+    "tsx": "^4.20.6"
   },
   "keywords": [
     "mcp",

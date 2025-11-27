@@ -224,3 +224,95 @@ export const AISystemsDiscoveryResponseSchema = z.object({
   }),
 });
 
+/**
+ * Gap Severity Schema
+ */
+export const GapSeveritySchema = z.enum(["CRITICAL", "HIGH", "MEDIUM", "LOW"]);
+
+/**
+ * Remediation Effort Schema
+ */
+export const RemediationEffortSchema = z.enum(["LOW", "MEDIUM", "HIGH"]);
+
+/**
+ * Gap Analysis Schema
+ */
+export const GapAnalysisSchema = z.object({
+  id: z.string(),
+  severity: GapSeveritySchema,
+  category: z.string(),
+  description: z.string(),
+  affectedSystems: z.array(z.string()),
+  articleReference: z.string(),
+  currentState: z.string(),
+  requiredState: z.string(),
+  remediationEffort: RemediationEffortSchema,
+  estimatedCost: z.string().optional(),
+  deadline: z.string().optional(),
+});
+
+/**
+ * Recommendation Schema
+ */
+export const RecommendationSchema = z.object({
+  id: z.string(),
+  priority: z.number().min(1).max(10),
+  title: z.string(),
+  description: z.string(),
+  articleReference: z.string(),
+  implementationSteps: z.array(z.string()),
+  estimatedEffort: z.string(),
+  expectedOutcome: z.string(),
+  dependencies: z.array(z.string()).optional(),
+});
+
+/**
+ * Compliance Documentation Schema
+ */
+export const ComplianceDocumentationSchema = z.object({
+  riskManagementTemplate: z.string().optional(),
+  technicalDocumentation: z.string().optional(),
+  conformityAssessment: z.string().optional(),
+  transparencyNotice: z.string().optional(),
+  qualityManagementSystem: z.string().optional(),
+  humanOversightProcedure: z.string().optional(),
+  dataGovernancePolicy: z.string().optional(),
+  incidentReportingProcedure: z.string().optional(),
+});
+
+/**
+ * Compliance Assessment Input Schema
+ */
+export const ComplianceAssessmentInputSchema = z.object({
+  organizationContext: OrganizationProfileSchema.optional(),
+  aiServicesContext: AISystemsDiscoveryResponseSchema.optional(),
+  focusAreas: z.array(z.string()).optional(),
+  generateDocumentation: z.boolean().optional().default(true),
+});
+
+/**
+ * Compliance Assessment Response Schema
+ */
+export const ComplianceAssessmentResponseSchema = z.object({
+  assessment: z.object({
+    overallScore: z.number().min(0).max(100),
+    riskLevel: GapSeveritySchema,
+    gaps: z.array(GapAnalysisSchema),
+    recommendations: z.array(RecommendationSchema),
+    complianceByArticle: z.record(z.object({
+      compliant: z.boolean(),
+      gaps: z.array(z.string()),
+    })),
+  }),
+  documentation: ComplianceDocumentationSchema.optional(),
+  reasoning: z.string(),
+  metadata: z.object({
+    assessmentDate: z.string(),
+    assessmentVersion: z.string(),
+    modelUsed: z.string(),
+    organizationAssessed: z.string().optional(),
+    systemsAssessed: z.array(z.string()),
+    focusAreas: z.array(z.string()),
+  }),
+});
+

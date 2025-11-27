@@ -231,36 +231,78 @@ Takes organization and service context to produce:
   "mcpServers": {
     "eu-ai-act": {
       "command": "npx",
-      "args": ["@eu-ai-act/mcp-server"]
+      "args": ["@eu-ai-act/mcp-server"],
+      "env": {
+        "TAVILY_API_KEY": "tvly-YOUR_API_KEY"
+      }
     }
   }
 }
 ```
 
+### 🔍 Tavily AI-Powered Company Research
+
+The MCP server now integrates with **[Tavily AI](https://tavily.com)** for intelligent, real-time company research during organization discovery. This enhancement transforms the `discover_organization` tool from mock data to **live web research**.
+
+#### Why Tavily?
+
+- **🎯 Optimized for LLMs** — Search results designed for AI agents and RAG systems
+- **📊 Comprehensive Data** — Multi-step research (overview, AI capabilities, compliance)
+- **✅ Source Citations** — Reliable URLs and AI-generated summaries
+- **⚡ Fast & Efficient** — Advanced search depth with minimal API credits
+
+#### What It Discovers:
+
+| Research Area | Information Extracted | EU AI Act Mapping |
+|--------------|----------------------|-------------------|
+| **Company Overview** | Business model, sector, size, headquarters | Article 16 (Provider obligations) |
+| **AI Capabilities** | AI maturity level, ML/AI technologies, products | Article 6 (Risk classification) |
+| **Compliance Status** | ISO certifications, GDPR compliance, QMS | Article 17 (Quality management) |
+| **EU Presence** | Jurisdictions, European operations | Article 22 (Authorized representative) |
+
+#### Setup:
+
+1. Get free API key from [app.tavily.com](https://app.tavily.com) (1,000 credits/month)
+2. Set environment variable: `TAVILY_API_KEY=tvly-YOUR_API_KEY`
+3. Run organization discovery — it now uses real company research!
+
+**Example:**
+```typescript
+// With Tavily: Real company research with 90+ completeness score
+discover_organization("OpenAI", "openai.com", "AI research company")
+
+// Returns: Actual sector, real AI maturity, discovered certifications, source URLs
+```
+
+📖 **[See detailed examples →](packages/eu-ai-act-mcp/TAVILY_EXAMPLE.md)**
+
 ---
 
 ## 🤖 Track 2: AI Compliance Agent
 
-An interactive AI agent that guides organizations through the entire compliance journey.
+An interactive AI agent that guides organizations through the entire compliance journey using **Gradio UI** and **Vercel AI SDK v5**.
 
 ### 🏗️ Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                     Gradio UI                           │
+│              Gradio Web UI (Python)                     │
 │   ┌─────────────────────────────────────────────────┐   │
 │   │  💬 Chat Interface                              │   │
 │   │  📊 Compliance Dashboard                        │   │
-│   │  📄 Document Preview                            │   │
+│   │  📄 Document Preview & Export                   │   │
 │   └─────────────────────────────────────────────────┘   │
 └────────────────────────┬────────────────────────────────┘
-                         │
+                         │ HTTP/REST
                          ▼
 ┌─────────────────────────────────────────────────────────┐
-│              Vercel AI SDK Agent                        │
-│   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
-│   │   Planner   │→→│  Executor   │→→│  Reasoner   │    │
-│   └─────────────┘  └─────────────┘  └─────────────┘    │
+│         Express API + Vercel AI SDK v5 Agent            │
+│   ┌─────────────────────────────────────────────────┐   │
+│   │  gpt-5-chat-latest with Streaming & Tool Calling           │   │
+│   │  - Context management                           │   │
+│   │  - Multi-step workflows                         │   │
+│   │  - Intelligent tool orchestration               │   │
+│   └─────────────────────────────────────────────────┘   │
 └────────────────────────┬────────────────────────────────┘
                          │
                          ▼
@@ -278,16 +320,38 @@ An interactive AI agent that guides organizations through the entire compliance 
 | Feature                      | Description                                          |
 | ---------------------------- | ---------------------------------------------------- |
 | **Conversational Interface** | Natural language interaction for non-technical users |
-| **Guided Workflows**         | Step-by-step compliance journey                      |
+| **Streaming Responses**      | Real-time AI responses with progressive display      |
+| **Contextual Awareness**     | Maintains full conversation history                  |
+| **Guided Workflows**         | Step-by-step compliance journey with tool chaining   |
 | **Real-time Assessment**     | Instant feedback on compliance status                |
 | **Document Generation**      | Auto-generated templates and reports                 |
-| **Multi-language**           | Support for all EU official languages                |
+| **Export Options**           | Download compliance documentation                    |
 
 ### 🛠️ Tech Stack
 
-- **[Vercel AI SDK](https://sdk.vercel.ai/)** — Agent orchestration and tool calling
-- **[Gradio](https://gradio.app/)** — Interactive web UI
+- **[Vercel AI SDK v5](https://ai-sdk.dev/)** — Agent orchestration and tool calling (upgraded from v4)
+- **[Gradio](https://gradio.app/)** — Interactive web UI with chat interface
+- **[Express](https://expressjs.com/)** — REST API server
 - **[MCP](https://modelcontextprotocol.io/)** — Tool integration protocol
+- **[OpenAI gpt-5-chat-latest](https://openai.com/)** — Language model for intelligent responses
+
+### 🚀 Quick Start
+
+```bash
+# Install dependencies
+pnpm install
+cd apps/eu-ai-act-agent
+pip3 install -r requirements.txt
+
+# Set API key
+export OPENAI_API_KEY="sk-your-key"
+
+# Start everything
+./start.sh
+# Opens at http://localhost:7860
+```
+
+See [apps/eu-ai-act-agent/QUICKSTART.md](apps/eu-ai-act-agent/QUICKSTART.md) for detailed instructions.
 
 ---
 
@@ -297,6 +361,7 @@ An interactive AI agent that guides organizations through the entire compliance 
 
 - Node.js 18+
 - pnpm 8+
+- Python 3.9+ with uv (fast package manager)
 - API key for LLM provider
 
 ### Installation
@@ -305,17 +370,38 @@ An interactive AI agent that guides organizations through the entire compliance 
 # Clone the repository
 git clone https://github.com/your-org/eu-ai-act-compliance.git
 
-# Install dependencies
+# Install uv (fast Python package manager)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install Node.js dependencies
 pnpm install
+
+# Install Python dependencies for agent
+cd apps/eu-ai-act-agent
+uv pip install -r requirements.txt
+cd ../..
 
 # Set up environment variables
 cp .env.example .env
+# Edit .env and add your OPENAI_API_KEY and TAVILY_API_KEY
 
-# Start the MCP server
-pnpm --filter @eu-ai-act/mcp-server dev
+# Build the MCP server
+pnpm --filter @eu-ai-act/mcp-server build
 
-# Start the Gradio agent (in another terminal)
+# Start the AI Agent with Gradio UI
+cd apps/eu-ai-act-agent
+./start.sh
+# Opens at http://localhost:7860
+```
+
+**Or run components separately:**
+
+```bash
+# Terminal 1: API Server
 pnpm --filter @eu-ai-act/agent dev
+
+# Terminal 2: Gradio UI
+pnpm --filter @eu-ai-act/agent gradio
 ```
 
 ### Quick Start with Claude Desktop

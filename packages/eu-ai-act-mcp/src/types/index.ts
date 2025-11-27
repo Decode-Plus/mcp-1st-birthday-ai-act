@@ -8,8 +8,9 @@
  * Relevant for determining compliance obligations and support measures
  */
 export type OrganizationSize = 
+  | "Startup" // Early stage company
   | "SME" // Small and Medium Enterprises (< 250 employees)
-  | "Large Enterprise" // > 250 employees
+  | "Enterprise" // Large enterprise (> 250 employees)
   | "Public Body" // Government or public sector entity
   | "Micro Enterprise"; // < 10 employees
 
@@ -20,8 +21,8 @@ export type OrganizationSize =
 export type AIMaturityLevel = 
   | "Nascent" // Just starting AI adoption
   | "Developing" // Actively implementing AI
-  | "Advanced" // Mature AI operations
-  | "Expert"; // Leading AI practice
+  | "Mature" // Mature AI operations
+  | "Leader"; // Leading AI practice
 
 /**
  * Risk Category per EU AI Act Article 6 and Annex III
@@ -38,6 +39,7 @@ export type RiskCategory =
 export type DeploymentModel = 
   | "On-premise" 
   | "Cloud" 
+  | "Cloud (API-based)"
   | "Hybrid"
   | "Edge"
   | "SaaS";
@@ -47,6 +49,7 @@ export type DeploymentModel =
  */
 export type ProviderRole = 
   | "Provider" // Develops/places AI on market
+  | "Provider/Deployer" // Both provider and deployer role
   | "Deployer" // Uses AI under own authority
   | "Importer" // Places on EU market from non-EU
   | "Distributor" // Makes available on market
@@ -57,8 +60,10 @@ export type ProviderRole =
  */
 export type ConformityAssessmentType = 
   | "Internal Control" // Article 43(1) - Annex VI
+  | "Internal Control (Articles 43, 46)" // Derogation case
   | "Third Party Assessment" // Article 43(2) - Annex VII
   | "Not Required" // For non-high-risk systems
+  | "Not Required - Transparency Obligations Only" // Limited risk systems
   | "Pending";
 
 /**
@@ -150,8 +155,16 @@ export interface OrganizationProfile {
     /** Profile completeness score (0-100) */
     completenessScore: number;
     
-    /** Data source (manual entry, API discovery, etc.) */
+    /** Data source (manual entry, API discovery, tavily-research, etc.) */
     dataSource: string;
+    
+    /** Tavily research results (when using Tavily for discovery) */
+    tavilyResults?: {
+      overview: string;
+      aiCapabilities: string;
+      compliance: string;
+      sources: string[];
+    };
   };
 }
 
@@ -211,6 +224,9 @@ export interface AISystemProfile {
     
     /** Type of conformity assessment */
     conformityAssessmentType: ConformityAssessmentType;
+
+    /** Regulatory references and applicable articles */
+    regulatoryReferences?: string[];
   };
   
   /** Technical Characteristics per Annex IV */
@@ -234,7 +250,27 @@ export interface AISystemProfile {
     trainingData?: {
       description: string;
       sources: string[];
+      volume?: string;
       biasAssessment: boolean;
+      biasDetected?: string[];
+    };
+
+    /** Accuracy metrics per Article 15 */
+    accuracy?: {
+      precision?: number;
+      recall?: number;
+      f1Score?: number;
+      performancePerDemographic?: {
+        [demographic: string]: number;
+      };
+    };
+
+    /** Model details for GPAI systems */
+    modelDetails?: {
+      baseModel: string;
+      finetuned: boolean;
+      trainingApproach: string;
+      contextWindowSize?: number;
     };
     
     /** Integration points with other systems */
@@ -244,6 +280,9 @@ export interface AISystemProfile {
     humanOversight: {
       enabled: boolean;
       description?: string;
+      level?: string; // e.g., "Low", "Medium", "High"
+      documentation?: string;
+      escalationThreshold?: string;
     };
   };
   
@@ -269,6 +308,21 @@ export interface AISystemProfile {
     
     /** Logging capabilities per Article 12 */
     hasAutomatedLogging: boolean;
+
+    /** Quality management system per Article 17 */
+    qualityManagementSystem?: boolean;
+
+    /** Risk management system per Article 9 */
+    riskManagementSystem?: boolean;
+
+    /** Transparency implementation for Article 50 systems */
+    transparencyImplemented?: boolean;
+
+    /** Compliance deadline */
+    complianceDeadline?: string;
+
+    /** Estimated effort to achieve compliance */
+    estimatedComplianceEffort?: string;
     
     /** Last compliance assessment date */
     lastAssessmentDate?: string;
@@ -290,6 +344,9 @@ export interface AISystemProfile {
     
     /** Discovery method (automated scan, manual entry, API, etc.) */
     discoveryMethod: string;
+
+    /** Research sources (Tavily, documentation references) */
+    researchSources?: string[];
   };
 }
 
@@ -316,13 +373,37 @@ export interface AISystemsDiscoveryResponse {
     partiallyCompliantCount: number;
     nonCompliantCount: number;
     requiresAttention: AISystemProfile[];
+    criticalGapCount?: number;
+    highGapCount?: number;
+    overallCompliancePercentage?: number;
   };
+
+  /** Regulatory framework information */
+  regulatoryFramework?: {
+    legislation: string;
+    officialJournal: string;
+    entryIntoForce: string;
+    implementationTimeline: string;
+    jurisdiction: string;
+  };
+
+  /** Compliance deadlines */
+  complianceDeadlines?: {
+    highRisk: string;
+    limitedRisk: string;
+    generalGPAI: string;
+  };
+
+  /** Discovery sources */
+  discoverySources?: string[];
   
   /** Discovery metadata */
   discoveryMetadata: {
     timestamp: string;
     method: string;
     coverage: string; // Estimated coverage of discovery
+    researchIntegration?: string;
+    conformityAssessmentUrgency?: string;
   };
 }
 
@@ -349,5 +430,191 @@ export interface DiscoverAIServicesInput {
   
   /** Scope of discovery (e.g., "all", "high-risk-only") */
   scope?: string;
+}
+
+/**
+ * Compliance Assessment Types
+ * Based on EU AI Act requirements for gap analysis and remediation
+ */
+
+/**
+ * Gap Severity Level
+ */
+export type GapSeverity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+
+/**
+ * Remediation Effort Level
+ */
+export type RemediationEffort = "LOW" | "MEDIUM" | "HIGH";
+
+/**
+ * Gap Analysis Item
+ * Represents a single compliance gap identified during assessment
+ */
+export interface GapAnalysis {
+  /** Unique identifier for the gap */
+  id: string;
+  
+  /** Severity level of the gap */
+  severity: GapSeverity;
+  
+  /** Category of the gap (e.g., "Technical Documentation", "Risk Management") */
+  category: string;
+  
+  /** Detailed description of the gap */
+  description: string;
+  
+  /** AI systems affected by this gap */
+  affectedSystems: string[];
+  
+  /** EU AI Act article reference */
+  articleReference: string;
+  
+  /** Current state description */
+  currentState: string;
+  
+  /** Required state per regulation */
+  requiredState: string;
+  
+  /** Estimated effort to remediate */
+  remediationEffort: RemediationEffort;
+  
+  /** Estimated cost range */
+  estimatedCost?: string;
+  
+  /** Compliance deadline */
+  deadline?: string;
+}
+
+/**
+ * Remediation Recommendation
+ */
+export interface Recommendation {
+  /** Unique identifier */
+  id: string;
+  
+  /** Priority (1-10, 1 being highest) */
+  priority: number;
+  
+  /** Recommendation title */
+  title: string;
+  
+  /** Detailed description */
+  description: string;
+  
+  /** EU AI Act article reference */
+  articleReference: string;
+  
+  /** Step-by-step implementation guide */
+  implementationSteps: string[];
+  
+  /** Estimated effort */
+  estimatedEffort: string;
+  
+  /** Expected outcome */
+  expectedOutcome: string;
+  
+  /** Dependencies on other recommendations */
+  dependencies?: string[];
+}
+
+/**
+ * Compliance Documentation Templates
+ * Markdown templates for various EU AI Act documentation requirements
+ */
+export interface ComplianceDocumentation {
+  /** Risk Management System template (Article 9) */
+  riskManagementTemplate?: string;
+  
+  /** Technical Documentation template (Article 11, Annex IV) */
+  technicalDocumentation?: string;
+  
+  /** Conformity Assessment template (Article 43) */
+  conformityAssessment?: string;
+  
+  /** Transparency Notice template (Article 50) */
+  transparencyNotice?: string;
+  
+  /** Quality Management System template (Article 17) */
+  qualityManagementSystem?: string;
+  
+  /** Human Oversight Procedure template (Article 14) */
+  humanOversightProcedure?: string;
+  
+  /** Data Governance Policy template (Article 10) */
+  dataGovernancePolicy?: string;
+  
+  /** Incident Reporting Procedure template */
+  incidentReportingProcedure?: string;
+}
+
+/**
+ * Compliance Assessment Input
+ */
+export interface ComplianceAssessmentInput {
+  /** Organization context from discover_organization tool */
+  organizationContext?: OrganizationProfile;
+  
+  /** AI services context from discover_ai_services tool */
+  aiServicesContext?: AISystemsDiscoveryResponse;
+  
+  /** Specific focus areas for assessment */
+  focusAreas?: string[];
+  
+  /** Whether to generate documentation templates (default: true) */
+  generateDocumentation?: boolean;
+}
+
+/**
+ * Compliance Assessment Response
+ */
+export interface ComplianceAssessmentResponse {
+  /** Assessment results */
+  assessment: {
+    /** Overall compliance score (0-100) */
+    overallScore: number;
+    
+    /** Overall risk level */
+    riskLevel: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+    
+    /** Identified compliance gaps */
+    gaps: GapAnalysis[];
+    
+    /** Remediation recommendations */
+    recommendations: Recommendation[];
+    
+    /** Compliance status by EU AI Act article */
+    complianceByArticle: Record<string, {
+      compliant: boolean;
+      gaps: string[];
+    }>;
+  };
+  
+  /** Generated documentation templates */
+  documentation?: ComplianceDocumentation;
+  
+  /** Chain-of-thought reasoning explanation */
+  reasoning: string;
+  
+  /** Assessment metadata */
+  metadata: {
+    /** Assessment timestamp */
+    assessmentDate: string;
+    
+    /** Assessment version */
+    assessmentVersion: string;
+    
+    /** AI model used for assessment */
+    modelUsed: string;
+    
+    /** Organization assessed */
+    organizationAssessed?: string;
+    
+    /** Systems assessed */
+    systemsAssessed: string[];
+    
+    /** Focus areas */
+    focusAreas: string[];
+  };
 }
 
