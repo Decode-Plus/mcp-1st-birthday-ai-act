@@ -61,22 +61,50 @@ Our MCP (Model Context Protocol) server provides **three powerful tools** that w
 #### 1️⃣ `discover_organization`
 **Organization Discovery & Profiling**
 
-Maps your organization's structure, AI deployment context, and regulatory obligations.
+Maps your organization's structure, AI deployment context, and regulatory obligations per **Article 16** (Provider Obligations), **Article 22** (Authorized Representatives), and **Article 49** (Registration Requirements).
 
 ```typescript
-// Output Schema
+// Output Schema - Based on EU AI Act Annex VIII Registration Requirements
 {
   organization: {
     name: string;
+    registrationNumber?: string; // VAT/company registration number
     sector: string;
-    size: "SME" | "Large Enterprise" | "Public Body";
+    size: "SME" | "Large Enterprise" | "Public Body" | "Micro Enterprise";
     jurisdiction: string[];
-    aiMaturityLevel: "Nascent" | "Developing" | "Advanced";
+    euPresence: boolean; // Determines if authorized rep needed
+    headquarters: {
+      country: string;
+      city: string;
+      address?: string;
+    };
+    contact: {
+      email: string; // Per Article 16(f) contact requirements
+      phone?: string;
+      website?: string;
+    };
+    aiMaturityLevel: "Nascent" | "Developing" | "Advanced" | "Expert";
+    aiSystemsCount?: number;
+    primaryRole: "Provider" | "Deployer" | "Importer" | "Distributor" | "Authorized Representative"; // Per Article 3(3)
   },
   regulatoryContext: {
     applicableFrameworks: string[];
-    complianceDeadlines: Date[];
+    complianceDeadlines: Array<{
+      date: string; // ISO 8601 format
+      description: string;
+      article: string; // AI Act article reference
+    }>;
     existingCertifications: string[];
+    hasAuthorizedRepresentative?: boolean; // Required for non-EU providers (Article 22)
+    notifiedBodyId?: string; // If third-party assessment needed
+    hasQualityManagementSystem: boolean; // Article 17 requirement
+    hasRiskManagementSystem: boolean; // Article 9 requirement
+  },
+  metadata: {
+    createdAt: string;
+    lastUpdated: string;
+    completenessScore: number; // 0-100
+    dataSource: string;
   }
 }
 ```
@@ -84,25 +112,87 @@ Maps your organization's structure, AI deployment context, and regulatory obliga
 #### 2️⃣ `discover_ai_services`
 **AI System Inventory & Classification**
 
-Catalogs all AI systems in use and pre-classifies them according to AI Act risk tiers.
+Catalogs all AI systems and classifies them according to EU AI Act risk tiers per **Article 6** (Classification Rules) and **Annex III** (High-Risk AI Systems). Provides comprehensive compliance status per **Articles 11-15, 43, 47-49, 72**.
 
 ```typescript
-// Output Schema
+// Output Schema - Based on EU AI Act Technical Documentation Requirements
 {
-  services: [{
-    name: string;
-    description: string;
-    purpose: string;
-    riskCategory: "Unacceptable" | "High" | "Limited" | "Minimal";
-    dataProcessed: string[];
-    deploymentModel: "On-premise" | "Cloud" | "Hybrid";
-    vendor: string | null;
-  }],
+  systems: Array<{
+    system: {
+      name: string;
+      systemId?: string; // For EU database registration (Article 49)
+      description: string;
+      intendedPurpose: string; // Article 3(12) definition
+      version: string;
+      status: "Development" | "Testing" | "Production" | "Deprecated";
+      provider: {
+        name: string;
+        role: "Provider" | "Deployer" | "Importer" | "Distributor";
+        contact: string;
+      };
+    };
+    riskClassification: {
+      category: "Unacceptable" | "High" | "Limited" | "Minimal";
+      annexIIICategory?: string; // Specific Annex III classification if high-risk
+      justification: string; // Per Article 6(3) exemption documentation
+      safetyComponent: boolean; // Article 6(1) safety component check
+      riskScore: number; // 0-100 quantitative assessment
+      conformityAssessmentRequired: boolean; // Article 43 requirement
+      conformityAssessmentType: "Internal Control" | "Third Party Assessment" | "Not Required" | "Pending";
+    };
+    technicalDetails: {
+      aiTechnology: string[]; // ML, DL, NLP, Computer Vision, etc.
+      dataProcessed: string[]; // Types of data per Article 10
+      processesSpecialCategoryData: boolean; // GDPR Article 9 special categories
+      deploymentModel: "On-premise" | "Cloud" | "Hybrid" | "Edge" | "SaaS";
+      vendor?: string;
+      trainingData?: {
+        description: string;
+        sources: string[];
+        biasAssessment: boolean; // Article 10(2)(f) bias mitigation
+      };
+      integrations: string[];
+      humanOversight: {
+        enabled: boolean; // Article 14 requirement
+        description?: string;
+      };
+    };
+    complianceStatus: {
+      hasTechnicalDocumentation: boolean; // Article 11 & Annex IV
+      conformityAssessmentStatus: "Not Started" | "In Progress" | "Completed" | "Not Required";
+      hasEUDeclaration: boolean; // Article 47
+      hasCEMarking: boolean; // Article 48
+      registeredInEUDatabase: boolean; // Article 49 & Annex VIII
+      hasPostMarketMonitoring: boolean; // Article 72
+      hasAutomatedLogging: boolean; // Article 12
+      lastAssessmentDate?: string;
+      identifiedGaps: string[]; // Specific compliance gaps with article references
+    };
+    metadata: {
+      createdAt: string;
+      lastUpdated: string;
+      dataSource: string;
+      discoveryMethod: string;
+    };
+  }>;
   riskSummary: {
-    highRiskCount: number;
-    limitedRiskCount: number;
+    unacceptableRiskCount: number; // Article 5 prohibited systems
+    highRiskCount: number; // Annex III systems
+    limitedRiskCount: number; // Article 50 transparency obligations
     minimalRiskCount: number;
-  }
+    totalCount: number;
+  };
+  complianceSummary: {
+    fullyCompliantCount: number;
+    partiallyCompliantCount: number;
+    nonCompliantCount: number;
+    requiresAttention: Array</* Systems needing immediate action */>;
+  };
+  discoveryMetadata: {
+    timestamp: string;
+    method: string;
+    coverage: string;
+  };
 }
 ```
 
