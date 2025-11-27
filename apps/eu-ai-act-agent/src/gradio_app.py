@@ -18,13 +18,13 @@ load_dotenv()
 API_URL = os.getenv("API_URL", "http://localhost:3001")
 API_TIMEOUT = 60  # seconds
 
-def chat_with_agent(message: str, history: List[List[str]]) -> Tuple[str, List[List[str]]]:
+def chat_with_agent(message: str, history: list) -> Tuple[str, list]:
     """
     Send a message to the EU AI Act agent and get a streaming response
     
     Args:
         message: User's input message
-        history: Chat history [[user_msg, bot_msg], ...]
+        history: Chat history in Gradio 6 messages format [{"role": "user/assistant", "content": "..."}]
         
     Returns:
         Tuple of (empty string, updated history)
@@ -33,24 +33,21 @@ def chat_with_agent(message: str, history: List[List[str]]) -> Tuple[str, List[L
         return "", history
     
     try:
-        # Convert Gradio history format to API format
-        api_history = []
-        for user_msg, bot_msg in history:
-            api_history.append({"role": "user", "content": user_msg})
-            if bot_msg:
-                api_history.append({"role": "assistant", "content": bot_msg})
-        
         # Make streaming request to API
         response = requests.post(
             f"{API_URL}/api/chat",
-            json={"message": message, "history": api_history},
+            json={"message": message, "history": history},
             stream=True,
             timeout=API_TIMEOUT,
         )
         
         if response.status_code != 200:
             error_msg = f"⚠️ Error: API returned status {response.status_code}"
-            return "", history + [[message, error_msg]]
+            new_history = history + [
+                {"role": "user", "content": message},
+                {"role": "assistant", "content": error_msg}
+            ]
+            return "", new_history
         
         # Collect streamed response
         bot_response = ""
@@ -67,19 +64,34 @@ def chat_with_agent(message: str, history: List[List[str]]) -> Tuple[str, List[L
                     except json.JSONDecodeError:
                         continue
         
-        # Add to history
-        history.append([message, bot_response])
-        return "", history
+        # Add to history in Gradio 6 messages format
+        new_history = history + [
+            {"role": "user", "content": message},
+            {"role": "assistant", "content": bot_response}
+        ]
+        return "", new_history
         
     except requests.exceptions.ConnectionError:
         error_msg = "⚠️ Cannot connect to API server. Make sure it's running on http://localhost:3001"
-        return "", history + [[message, error_msg]]
+        new_history = history + [
+            {"role": "user", "content": message},
+            {"role": "assistant", "content": error_msg}
+        ]
+        return "", new_history
     except requests.exceptions.Timeout:
         error_msg = "⚠️ Request timed out. The agent might be processing a complex query."
-        return "", history + [[message, error_msg]]
+        new_history = history + [
+            {"role": "user", "content": message},
+            {"role": "assistant", "content": error_msg}
+        ]
+        return "", new_history
     except Exception as e:
         error_msg = f"⚠️ Error: {str(e)}"
-        return "", history + [[message, error_msg]]
+        new_history = history + [
+            {"role": "user", "content": message},
+            {"role": "assistant", "content": error_msg}
+        ]
+        return "", new_history
 
 def check_api_status() -> str:
     """Check if the API server is running"""
@@ -106,36 +118,9 @@ def get_example_queries() -> List[List[str]]:
         ["What's the timeline for EU AI Act enforcement?"],
     ]
 
-# Create Gradio interface
+# Create Gradio interface  
 with gr.Blocks(
     title="🇪🇺 EU AI Act Compliance Agent",
-    theme=gr.themes.Soft(
-        primary_hue="blue",
-        secondary_hue="indigo",
-    ),
-    css="""
-        .header {
-            text-align: center;
-            padding: 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 10px;
-            margin-bottom: 20px;
-        }
-        .header h1 {
-            margin: 0;
-            font-size: 2.5em;
-        }
-        .header p {
-            margin: 10px 0 0 0;
-            opacity: 0.9;
-        }
-        .status-box {
-            padding: 10px;
-            border-radius: 5px;
-            margin-bottom: 10px;
-        }
-    """
 ) as demo:
     
     # Header
@@ -149,12 +134,12 @@ with gr.Blocks(
     # Main content
     with gr.Row():
         with gr.Column(scale=2):
-            # Chat interface
+            # Chat interface - Gradio 6 uses messages format by default
             chatbot = gr.Chatbot(
                 label="Chat with EU AI Act Expert",
                 height=500,
                 show_label=True,
-                avatar_images=(None, "🇪🇺"),
+                type="messages",  # Gradio 6 messages format
             )
             
             with gr.Row():
@@ -231,9 +216,9 @@ if __name__ == "__main__":
     print("="*60 + "\n")
     
     demo.launch(
-        server_name="0.0.0.0",
+        server_name="localhost",
         server_port=7860,
-        share=False,
+        share=True,
         show_error=True,
     )
 

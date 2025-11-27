@@ -42,8 +42,18 @@ if ! command -v uv &> /dev/null; then
     exit 0
 fi
 
+# Create virtual environment if it doesn't exist
+if [ ! -d ".venv" ]; then
+    echo "📦 Creating virtual environment with Python 3.13..."
+    uv venv --python python3.13
+    echo ""
+fi
+
+# Activate virtual environment
+source .venv/bin/activate
+
 # Install Python dependencies if needed
-if ! python3 -c "import gradio" 2>/dev/null; then
+if ! python -c "import gradio" 2>/dev/null; then
     echo "📦 Installing Python dependencies with uv..."
     uv pip install -r requirements.txt
     echo ""
@@ -86,9 +96,9 @@ API_PID=$!
 echo "Waiting for API server to start..."
 sleep 3
 
-# Start Gradio in background (using uv run)
+# Start Gradio in background (using virtual environment Python)
 echo "Starting Gradio UI..."
-uv run src/gradio_app.py > /tmp/eu-ai-act-gradio.log 2>&1 &
+python src/gradio_app.py > /tmp/eu-ai-act-gradio.log 2>&1 &
 GRADIO_PID=$!
 
 # Wait for Gradio to be ready

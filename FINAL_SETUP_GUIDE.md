@@ -459,15 +459,15 @@ git push hf main
 
 ## 📚 Documentation
 
-| Document | Description |
-|----------|-------------|
-| [Main README](README.md) | Project overview |
-| [Agent README](apps/eu-ai-act-agent/README.md) | Agent documentation |
-| [Quick Start](apps/eu-ai-act-agent/QUICKSTART.md) | 5-minute setup |
-| [Architecture](apps/eu-ai-act-agent/ARCHITECTURE.md) | Technical details |
-| [Examples](apps/eu-ai-act-agent/EXAMPLES.md) | Usage examples |
-| [API Reference](apps/eu-ai-act-agent/API.md) | API docs |
-| [Deployment](apps/eu-ai-act-agent/DEPLOYMENT.md) | Production setup |
+| Document                                             | Description         |
+| ---------------------------------------------------- | ------------------- |
+| [Main README](README.md)                             | Project overview    |
+| [Agent README](apps/eu-ai-act-agent/README.md)       | Agent documentation |
+| [Quick Start](apps/eu-ai-act-agent/QUICKSTART.md)    | 5-minute setup      |
+| [Architecture](apps/eu-ai-act-agent/ARCHITECTURE.md) | Technical details   |
+| [Examples](apps/eu-ai-act-agent/EXAMPLES.md)         | Usage examples      |
+| [API Reference](apps/eu-ai-act-agent/API.md)         | API docs            |
+| [Deployment](apps/eu-ai-act-agent/DEPLOYMENT.md)     | Production setup    |
 
 ---
 
