@@ -30,10 +30,10 @@ importers:
         specifier: 0.18.0
         version: 0.18.0
     devDependencies:
-      '@acme/tailwind-config':
+      '@decode/tailwind-config':
         specifier: workspace:^0.1.0
         version: link:../../tooling/tailwind
-      '@acme/tsconfig':
+      '@decode/tsconfig':
         specifier: workspace:^0.1.0
         version: link:../../tooling/typescript
       '@biomejs/biome':
@@ -136,13 +136,13 @@ importers:
         specifier: ^4.5.2
         version: 4.5.2(@types/react@18.2.37)(react@18.2.0)
     devDependencies:
-      '@acme/api':
+      '@decode/api':
         specifier: workspace:^0.1.0
         version: link:../../packages/api
-      '@acme/tailwind-config':
+      '@decode/tailwind-config':
         specifier: workspace:^0.1.0
         version: link:../../tooling/tailwind
-      '@acme/tsconfig':
+      '@decode/tsconfig':
         specifier: workspace:^0.1.0
         version: link:../../tooling/typescript
       '@babel/core':
@@ -175,13 +175,13 @@ importers:
 
   apps/web:
     dependencies:
-      '@acme/api':
+      '@decode/api':
         specifier: workspace:^0.1.0
         version: link:../../packages/api
-      '@acme/auth':
+      '@decode/auth':
         specifier: workspace:^0.1.0
         version: link:../../packages/auth
-      '@acme/db':
+      '@decode/db':
         specifier: workspace:^0.1.0
         version: link:../../packages/db
       '@hookform/resolvers':
@@ -350,10 +350,10 @@ importers:
         specifier: ^3.22.2
         version: 3.22.2
     devDependencies:
-      '@acme/tailwind-config':
+      '@decode/tailwind-config':
         specifier: workspace:^0.1.0
         version: link:../../tooling/tailwind
-      '@acme/tsconfig':
+      '@decode/tsconfig':
         specifier: workspace:^0.1.0
         version: link:../../tooling/typescript
       '@biomejs/biome':
@@ -380,10 +380,10 @@ importers:
 
   packages/api:
     dependencies:
-      '@acme/auth':
+      '@decode/auth':
         specifier: workspace:^0.1.0
         version: link:../auth
-      '@acme/db':
+      '@decode/db':
         specifier: workspace:^0.1.0
         version: link:../db
       '@trpc/client':
@@ -399,7 +399,7 @@ importers:
         specifier: ^3.22.2
         version: 3.22.2
     devDependencies:
-      '@acme/tsconfig':
+      '@decode/tsconfig':
         specifier: workspace:^0.1.0
         version: link:../../tooling/typescript
       '@biomejs/biome':
@@ -411,7 +411,7 @@ importers:
 
   packages/auth:
     dependencies:
-      '@acme/db':
+      '@decode/db':
         specifier: workspace:^0.1.0
         version: link:../db
       '@auth/core':
@@ -439,7 +439,7 @@ importers:
         specifier: ^3.22.2
         version: 3.22.2
     devDependencies:
-      '@acme/tsconfig':
+      '@decode/tsconfig':
         specifier: workspace:^0.1.0
         version: link:../../tooling/typescript
       '@biomejs/biome':
@@ -458,7 +458,7 @@ importers:
         specifier: ^0.29.0
         version: 0.29.0(@planetscale/database@1.11.0)
     devDependencies:
-      '@acme/tsconfig':
+      '@decode/tsconfig':
         specifier: workspace:^0.1.0
         version: link:../../tooling/typescript
       '@biomejs/biome':
@@ -488,7 +488,7 @@ importers:
         specifier: ^1.0.7
         version: 1.0.7(tailwindcss@3.3.5)
     devDependencies:
-      '@acme/tsconfig':
+      '@decode/tsconfig':
         specifier: workspace:^0.1.0
         version: link:../typescript
       '@biomejs/biome':

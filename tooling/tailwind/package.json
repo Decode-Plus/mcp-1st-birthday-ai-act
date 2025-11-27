@@ -1,5 +1,5 @@
 {
-  "name": "@acme/tailwind-config",
+  "name": "@decode/tailwind-config",
   "version": "0.1.0",
   "private": true,
   "main": "index.ts",
@@ -19,7 +19,7 @@
     "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
-    "@acme/tsconfig": "workspace:^0.1.0",
+    "@decode/tsconfig": "workspace:^0.1.0",
     "@biomejs/biome": "^1.5.3",
     "typescript": "^5.2.2"
   }

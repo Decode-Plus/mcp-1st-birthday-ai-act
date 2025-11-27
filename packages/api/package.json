@@ -1,5 +1,5 @@
 {
-  "name": "@acme/api",
+  "name": "@decode/api",
   "version": "0.1.0",
   "private": true,
   "main": "./index.ts",
@@ -12,8 +12,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@acme/auth": "workspace:^0.1.0",
-    "@acme/db": "workspace:^0.1.0",
+    "@decode/auth": "workspace:^0.1.0",
+    "@decode/db": "workspace:^0.1.0",
     "@trpc/client": "next",
     "@trpc/server": "next",
     "superjson": "2.2.0",
@@ -21,7 +21,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^1.5.3",
-    "@acme/tsconfig": "workspace:^0.1.0",
+    "@decode/tsconfig": "workspace:^0.1.0",
     "typescript": "^5.2.2"
   }
 }
