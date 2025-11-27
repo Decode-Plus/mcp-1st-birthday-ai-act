@@ -1,0 +1,23 @@
+{
+  "name": "@acme/auth-proxy",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nitro build",
+    "clean": "rm -rf .turbo node_modules",
+    "dev": "nitro dev --port 3001",
+    "lint": "biome lint ./routes",
+    "format": "biome format ./routes ",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@auth/core": "^0.18.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.5.3",
+    "@acme/tailwind-config": "workspace:^0.1.0",
+    "@acme/tsconfig": "workspace:^0.1.0",
+    "nitropack": "^2.7.2",
+    "typescript": "^5.2.2"
+  }
+}
