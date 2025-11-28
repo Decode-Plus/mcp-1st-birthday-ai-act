@@ -129,28 +129,42 @@ app.post("/api/chat", async (req, res) => {
       return res.status(400).json({ error: "Message is required" });
     }
 
-    // Read model configuration from headers (set by Gradio UI)
+    // Read model selection from headers (set by Gradio UI)
     const modelHeader = req.headers["x-ai-model"] as string;
+    
+    // SECURITY: Only read user-provided keys from headers if they want to override
+    // Backend environment keys are the PRIMARY source and are NEVER exposed to frontend
     const openaiKeyHeader = req.headers["x-openai-api-key"] as string;
     const xaiKeyHeader = req.headers["x-xai-api-key"] as string;
     const anthropicKeyHeader = req.headers["x-anthropic-api-key"] as string;
+    const tavilyKeyHeader = req.headers["x-tavily-api-key"] as string;
 
-    // Set environment variables for this request if provided via headers
+    // Set model selection if provided (default to claude-4.5 for Anthropic hackathon!)
     if (modelHeader) {
       process.env.AI_MODEL = modelHeader;
       console.log(`[API] Model set via header: ${modelHeader}`);
+    } else if (!process.env.AI_MODEL) {
+      process.env.AI_MODEL = "claude-4.5";
+      console.log(`[API] Using default model: claude-4.5 (Anthropic)`);
     }
-    if (openaiKeyHeader) {
+    
+    // Only override env keys if user explicitly provides their own keys
+    // This allows users to use their own keys if they prefer
+    if (openaiKeyHeader && openaiKeyHeader.length > 10) {
       process.env.OPENAI_API_KEY = openaiKeyHeader;
-      console.log(`[API] OpenAI API key set via header`);
+      console.log(`[API] Using user-provided OpenAI API key`);
     }
-    if (xaiKeyHeader) {
+    if (xaiKeyHeader && xaiKeyHeader.length > 10) {
       process.env.XAI_API_KEY = xaiKeyHeader;
-      console.log(`[API] xAI API key set via header`);
+      console.log(`[API] Using user-provided xAI API key`);
     }
-    if (anthropicKeyHeader) {
+    if (anthropicKeyHeader && anthropicKeyHeader.length > 10) {
       process.env.ANTHROPIC_API_KEY = anthropicKeyHeader;
-      console.log(`[API] Anthropic API key set via header`);
+      console.log(`[API] Using user-provided Anthropic API key`);
+    }
+    if (tavilyKeyHeader && tavilyKeyHeader.length > 10) {
+      process.env.TAVILY_API_KEY = tavilyKeyHeader;
+      console.log(`[API] Using user-provided Tavily API key`);
     }
 
     // Set headers for streaming

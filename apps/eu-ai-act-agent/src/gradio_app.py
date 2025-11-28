@@ -42,11 +42,14 @@ AVAILABLE_MODELS = {
 }
 
 # Current model settings (can be updated via UI)
+# SECURITY: Never expose backend API keys - only store user-provided keys for this session
 current_model_settings = {
-    "model": os.getenv("AI_MODEL", "gpt-5"),
-    "openai_api_key": os.getenv("OPENAI_API_KEY", ""),
-    "xai_api_key": os.getenv("XAI_API_KEY", ""),
-    "anthropic_api_key": os.getenv("ANTHROPIC_API_KEY", "")
+    "model": os.getenv("AI_MODEL", "claude-4.5"),  # Default to Anthropic (hackathon host!)
+    # User-provided keys only (NOT from env - backend has its own keys)
+    "openai_api_key": "",
+    "xai_api_key": "",
+    "anthropic_api_key": "",
+    "tavily_api_key": ""  # For web research
 }
 
 def format_tool_call(tool_name: str, args: dict) -> str:
@@ -86,14 +89,20 @@ def format_thinking_indicator() -> str:
     return "\n\n⏳ *Processing with MCP tools...*\n"
 
 def get_api_headers() -> dict:
-    """Get headers with model configuration for API requests"""
+    """Get headers with model configuration for API requests
+    
+    SECURITY: Only pass model selection. API keys are managed by the backend.
+    User-provided keys (if any) are only passed when explicitly set in this session.
+    Backend uses its own environment keys as primary - we don't expose them here.
+    """
     headers = {"Content-Type": "application/json"}
     
-    # Pass model selection
+    # Pass model selection only
     if current_model_settings["model"]:
         headers["X-AI-Model"] = current_model_settings["model"]
     
-    # Pass appropriate API key based on model
+    # Only pass user-provided keys (for users who want to use their own keys)
+    # Backend will fall back to its own env keys if these are not provided
     model = current_model_settings["model"]
     if model == "gpt-5" and current_model_settings["openai_api_key"]:
         headers["X-OpenAI-API-Key"] = current_model_settings["openai_api_key"]
@@ -101,6 +110,10 @@ def get_api_headers() -> dict:
         headers["X-XAI-API-Key"] = current_model_settings["xai_api_key"]
     elif model == "claude-4.5" and current_model_settings["anthropic_api_key"]:
         headers["X-Anthropic-API-Key"] = current_model_settings["anthropic_api_key"]
+    
+    # Tavily API key for web research (optional - backend has its own)
+    if current_model_settings["tavily_api_key"]:
+        headers["X-Tavily-API-Key"] = current_model_settings["tavily_api_key"]
     
     return headers
 
@@ -327,33 +340,45 @@ with gr.Blocks(
             
             model_dropdown = gr.Dropdown(
                 choices=[(v["name"], k) for k, v in AVAILABLE_MODELS.items()],
-                value=current_model_settings["model"],
+                value="claude-4.5",  # Default to Anthropic (hackathon host!)
                 label="AI Model",
                 info="Select the AI model to use"
             )
             
-            # API Key inputs (password fields)
-            with gr.Accordion("🔑 API Keys", open=False):
+            # API Key inputs (password fields) - OPTIONAL: Backend has its own keys
+            with gr.Accordion("🔑 API Keys (Optional)", open=False):
+                gr.Markdown("*Backend uses configured keys by default. Only provide your own keys if you want to override.*")
+                
+                gr.Markdown("#### 🔍 Research API")
+                tavily_key = gr.Textbox(
+                    label="Tavily API Key",
+                    placeholder="tvly-... (leave empty to use backend key)",
+                    type="password",
+                    value="",  # Never show existing keys
+                    info="Optional - for web research & organization discovery"
+                )
+                
+                gr.Markdown("#### 🤖 AI Model APIs")
+                anthropic_key = gr.Textbox(
+                    label="Anthropic API Key",
+                    placeholder="sk-ant-... (leave empty to use backend key)",
+                    type="password",
+                    value="",  # Never show existing keys
+                    info="Optional - for Claude 4.5 (default model)"
+                )
                 openai_key = gr.Textbox(
                     label="OpenAI API Key",
-                    placeholder="sk-...",
+                    placeholder="sk-... (leave empty to use backend key)",
                     type="password",
-                    value=current_model_settings["openai_api_key"][:8] + "..." if current_model_settings["openai_api_key"] else "",
-                    info="Required for GPT-5"
+                    value="",  # Never show existing keys
+                    info="Optional - for GPT-5"
                 )
                 xai_key = gr.Textbox(
                     label="xAI API Key",
-                    placeholder="xai-...",
+                    placeholder="xai-... (leave empty to use backend key)",
                     type="password",
-                    value=current_model_settings["xai_api_key"][:8] + "..." if current_model_settings["xai_api_key"] else "",
-                    info="Required for Grok 4.1"
-                )
-                anthropic_key = gr.Textbox(
-                    label="Anthropic API Key",
-                    placeholder="sk-ant-...",
-                    type="password",
-                    value=current_model_settings["anthropic_api_key"][:8] + "..." if current_model_settings["anthropic_api_key"] else "",
-                    info="Required for Claude 4.5"
+                    value="",  # Never show existing keys
+                    info="Optional - for Grok 4.1"
                 )
                 save_keys_btn = gr.Button("💾 Save Keys", variant="secondary", size="sm")
                 keys_status = gr.Markdown("")
@@ -442,29 +467,35 @@ with gr.Blocks(
         model_info = AVAILABLE_MODELS.get(model_value, {})
         return f"✅ Model set to: **{model_info.get('name', model_value)}**"
     
-    def save_api_keys(openai_val, xai_val, anthropic_val):
-        """Save API keys (only if they look like new keys, not masked ones)"""
+    def save_api_keys(tavily_val, anthropic_val, openai_val, xai_val):
+        """Save user-provided API keys for this session only
+        
+        SECURITY: These are stored in memory only for this session.
+        They are NOT persisted and NOT sent to backend unless user provides them.
+        Backend uses its own configured keys by default.
+        """
         saved = []
         
-        # Only update if it looks like a real key (not masked)
-        if openai_val and not openai_val.endswith("...") and len(openai_val) > 10:
-            current_model_settings["openai_api_key"] = openai_val
-            os.environ["OPENAI_API_KEY"] = openai_val
-            saved.append("OpenAI")
+        # Only update if a real key is provided
+        if tavily_val and len(tavily_val) > 10:
+            current_model_settings["tavily_api_key"] = tavily_val
+            saved.append("Tavily")
         
-        if xai_val and not xai_val.endswith("...") and len(xai_val) > 10:
-            current_model_settings["xai_api_key"] = xai_val
-            os.environ["XAI_API_KEY"] = xai_val
-            saved.append("xAI")
-        
-        if anthropic_val and not anthropic_val.endswith("...") and len(anthropic_val) > 10:
+        if anthropic_val and len(anthropic_val) > 10:
             current_model_settings["anthropic_api_key"] = anthropic_val
-            os.environ["ANTHROPIC_API_KEY"] = anthropic_val
             saved.append("Anthropic")
         
+        if openai_val and len(openai_val) > 10:
+            current_model_settings["openai_api_key"] = openai_val
+            saved.append("OpenAI")
+        
+        if xai_val and len(xai_val) > 10:
+            current_model_settings["xai_api_key"] = xai_val
+            saved.append("xAI")
+        
         if saved:
-            return f"✅ Saved keys for: {', '.join(saved)}"
-        return "ℹ️ No new keys to save (enter full key values)"
+            return f"✅ Keys saved for this session: {', '.join(saved)}"
+        return "ℹ️ No keys provided (backend will use its configured keys)"
     
     def get_current_model_status():
         """Get current model and key status"""
@@ -514,8 +545,8 @@ with gr.Blocks(
     # Model selection handler
     model_dropdown.change(update_model, [model_dropdown], [keys_status])
     
-    # Save keys handler
-    save_keys_btn.click(save_api_keys, [openai_key, xai_key, anthropic_key], [keys_status])
+    # Save keys handler (order matches function signature)
+    save_keys_btn.click(save_api_keys, [tavily_key, anthropic_key, openai_key, xai_key], [keys_status])
 
 # Launch the app
 if __name__ == "__main__":

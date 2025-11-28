@@ -6,12 +6,12 @@
  * and retrieve tools dynamically.
  * 
  * Environment Variable:
- * - AI_MODEL: "gpt-5" | "grok-4-1" | "claude-4.5" (default: "gpt-5")
+ * - AI_MODEL: "claude-4.5" | "gpt-5" | "grok-4-1" (default: "claude-4.5")
  * 
  * Supported Models:
+ * - claude-4.5: Anthropic Claude Sonnet 4.5 (requires ANTHROPIC_API_KEY) - DEFAULT
  * - gpt-5: OpenAI GPT-5 (requires OPENAI_API_KEY)
  * - grok-4-1: xAI Grok 4.1 Fast Reasoning (requires XAI_API_KEY)
- * - claude-4.5: Anthropic Claude Sonnet 4.5 (requires ANTHROPIC_API_KEY)
  */
 
 import { xai } from "@ai-sdk/xai";
@@ -35,7 +35,7 @@ const MCP_SERVER_PATH = resolve(__dirname, "../../../../packages/eu-ai-act-mcp/d
  * Supports: "gpt-5" (OpenAI), "grok-4-1" (xAI), or "claude-4.5" (Anthropic)
  */
 function getModel() {
-  const modelEnv = process.env.AI_MODEL || "gpt-5";
+  const modelEnv = process.env.AI_MODEL || "claude-4.5";  // Default to Anthropic (hackathon host!)
   
   console.log(`[Agent] Using AI model: ${modelEnv}`);
   

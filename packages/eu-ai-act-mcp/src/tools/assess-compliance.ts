@@ -2,19 +2,19 @@
  * Compliance Assessment Tool
  * Implements EU AI Act compliance analysis using AI-powered assessment
  * 
- * Uses xAI Grok 4, OpenAI GPT-5, or Anthropic Claude 4.5 via Vercel AI SDK to analyze:
+ * Uses Anthropic Claude 4.5, OpenAI GPT-5, or xAI Grok 4 via Vercel AI SDK to analyze:
  * - Gap analysis against AI Act requirements
  * - Risk-specific compliance checklists
  * - Draft documentation templates
  * - Remediation recommendations
  * 
  * Environment Variable:
- * - AI_MODEL: "gpt-5" | "grok-4-1" | "claude-4.5" (default: "grok-4-1")
+ * - AI_MODEL: "claude-4.5" | "gpt-5" | "grok-4-1" (default: "claude-4.5")
  * 
  * Supported Models:
+ * - claude-4.5: Anthropic Claude Sonnet 4.5 (requires ANTHROPIC_API_KEY) - DEFAULT
  * - gpt-5: OpenAI GPT-5 (requires OPENAI_API_KEY)
  * - grok-4-1: xAI Grok 4.1 Fast Reasoning (requires XAI_API_KEY)
- * - claude-4.5: Anthropic Claude Sonnet 4.5 (requires ANTHROPIC_API_KEY)
  * 
  * Research Integration:
  * - EU AI Act Regulation (EU) 2024/1689
@@ -45,7 +45,7 @@ import type {
  * Supports: "gpt-5" (OpenAI), "grok-4-1" (xAI), or "claude-4.5" (Anthropic)
  */
 function getModel() {
-  const modelEnv = process.env.AI_MODEL || "grok-4-1";
+  const modelEnv = process.env.AI_MODEL || "claude-4.5";  // Default to Anthropic (hackathon host!)
   
   console.error(`[assess_compliance] Using AI model: ${modelEnv}`);
   
