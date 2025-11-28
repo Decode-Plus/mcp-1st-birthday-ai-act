@@ -38,7 +38,7 @@ async function scanForAISystems(
   systemNames?: string[]
 ): Promise<AISystemProfile[]> {
   const apiKey = process.env.TAVILY_API_KEY;
-  const organizationName = orgContext?.organization.name || "Example Corp";
+  const organizationName = orgContext?.organization?.name || "Example Corp";
   
   if (!apiKey) {
     console.warn("⚠️  TAVILY_API_KEY not set, using fallback mock data");
@@ -324,7 +324,7 @@ function createCustomSystemProfile(
       provider: {
         name: organizationName,
         role: "Provider",
-        contact: orgContext?.organization.contact.email || "contact@example.com",
+        contact: orgContext?.organization?.contact?.email || "contact@example.com",
       },
     },
     riskClassification,
@@ -369,7 +369,7 @@ function createAISystemProfile(
       provider: {
         name: organizationName,
         role: "Provider",
-        contact: orgContext?.organization.contact.email || "contact@example.com",
+        contact: orgContext?.organization?.contact?.email || "contact@example.com",
       },
     },
     riskClassification,
@@ -607,9 +607,9 @@ function getMockSystems(orgContext?: OrganizationProfile): AISystemProfile[] {
         version: "1.0.0",
         status: "Production",
         provider: {
-          name: orgContext?.organization.name || "Example Corp",
+          name: orgContext?.organization?.name || "Example Corp",
           role: "Provider",
-          contact: orgContext?.organization.contact.email || "contact@example.com",
+          contact: orgContext?.organization?.contact?.email || "contact@example.com",
         },
       },
       riskClassification: {

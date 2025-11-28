@@ -630,6 +630,9 @@ export interface ComplianceAssessmentResponse {
     
     /** Focus areas */
     focusAreas: string[];
+    
+    /** Paths to generated markdown documentation files */
+    documentationFiles?: string[];
   };
 }
 

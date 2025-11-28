@@ -62,15 +62,29 @@ function getModel() {
 
 /**
  * Create MCP client and retrieve tools
+ * Passes current environment variables (including AI_MODEL) to the MCP server
  */
 async function createMCPClientWithTools() {
+  // Pass ALL current environment variables to the MCP server child process
+  // This ensures AI_MODEL and API keys set by the server are available to MCP tools
+  // Filter out undefined values to satisfy Record<string, string> type
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value !== undefined) {
+      env[key] = value;
+    }
+  }
+  
   const transport = new StdioMCPTransport({
     command: "node",
     args: [MCP_SERVER_PATH],
+    env,
   });
 
   const client = await createMCPClient({ transport });
   const tools = await client.tools();
+  
+  console.log(`[Agent] MCP client created with AI_MODEL=${process.env.AI_MODEL}`);
 
   return { client, tools };
 }
@@ -133,6 +147,14 @@ export function createAgent() {
                       if (docs.humanOversightProcedure) console.log("   ✓ Human Oversight Procedure (Article 14)");
                       if (docs.dataGovernancePolicy) console.log("   ✓ Data Governance Policy (Article 10)");
                       if (docs.incidentReportingProcedure) console.log("   ✓ Incident Reporting Procedure");
+                    }
+                    
+                    // Show documentation files
+                    if (parsed.metadata?.documentationFiles && parsed.metadata.documentationFiles.length > 0) {
+                      console.log(`\n💾 Documentation Files Saved:`);
+                      for (const filePath of parsed.metadata.documentationFiles) {
+                        console.log(`   📄 ${filePath}`);
+                      }
                     }
                     
                     if (parsed.metadata) {
@@ -226,6 +248,14 @@ export function createAgent() {
                     if (docs.humanOversightProcedure) console.log("   ✓ Human Oversight Procedure (Article 14)");
                     if (docs.dataGovernancePolicy) console.log("   ✓ Data Governance Policy (Article 10)");
                     if (docs.incidentReportingProcedure) console.log("   ✓ Incident Reporting Procedure");
+                  }
+                  
+                  // Show documentation files
+                  if (result.metadata?.documentationFiles && result.metadata.documentationFiles.length > 0) {
+                    console.log(`\n💾 Documentation Files Saved:`);
+                    for (const filePath of result.metadata.documentationFiles) {
+                      console.log(`   📄 ${filePath}`);
+                    }
                   }
                   
                   if (result.metadata) {

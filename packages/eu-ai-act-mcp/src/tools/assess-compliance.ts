@@ -30,6 +30,9 @@ import { xai } from "@ai-sdk/xai";
 import { openai } from "@ai-sdk/openai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
+import { writeFile, mkdir } from "fs/promises";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
 import type {
   OrganizationProfile,
   AISystemsDiscoveryResponse,
@@ -39,6 +42,9 @@ import type {
   Recommendation,
   ComplianceDocumentation,
 } from "../types/index.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 /**
  * Get the AI model based on AI_MODEL environment variable
@@ -519,8 +525,18 @@ export async function assessCompliance(
   console.error(`   Gaps Found: ${assessmentData.gaps.length}`);
   console.error(`   Recommendations: ${assessmentData.recommendations.length}`);
   
+  // Calculate final score (may adjust based on our own analysis)
+  const calculatedScore = calculateOverallScore(
+    assessmentData.gaps,
+    aiServicesContext
+  );
+  
+  // Use AI-assessed score if available, otherwise use calculated
+  const finalScore = assessmentData.overallScore || calculatedScore;
+  
   // Step 2: Generate documentation templates if requested
   let documentation: ComplianceDocumentation | undefined;
+  let documentationFilePaths: string[] = [];
   
   if (generateDocumentation) {
     console.error("\n📄 Generating documentation templates...");
@@ -543,17 +559,28 @@ export async function assessCompliance(
     
     if (documentation) {
       console.error("✅ Documentation templates generated");
+      console.error("\n💾 Saving documentation files...");
+      
+      // Save all documentation as markdown files
+      try {
+        documentationFilePaths = await saveDocumentationFiles(
+          documentation,
+          {
+            overallScore: finalScore,
+            riskLevel: assessmentData.riskLevel,
+            gaps: assessmentData.gaps,
+            recommendations: assessmentData.recommendations,
+          },
+          organizationContext?.organization.name,
+          aiServicesContext?.systems.map(s => s.system.name)
+        );
+        console.error(`✅ Saved ${documentationFilePaths.length} documentation files`);
+      } catch (error) {
+        console.error("⚠️  Warning: Failed to save documentation files:", error);
+        // Continue even if file saving fails
+      }
     }
   }
-  
-  // Calculate final score (may adjust based on our own analysis)
-  const calculatedScore = calculateOverallScore(
-    assessmentData.gaps,
-    aiServicesContext
-  );
-  
-  // Use AI-assessed score if available, otherwise use calculated
-  const finalScore = assessmentData.overallScore || calculatedScore;
   
   // Determine which model was used for metadata
   const modelEnv = process.env.AI_MODEL || "grok-4-1";
@@ -581,6 +608,7 @@ export async function assessCompliance(
       organizationAssessed: organizationContext?.organization.name,
       systemsAssessed: aiServicesContext?.systems.map(s => s.system.name) || [],
       focusAreas: focusAreas || [],
+      documentationFiles: documentationFilePaths.length > 0 ? documentationFilePaths : undefined,
     },
   };
   
@@ -607,6 +635,197 @@ export async function assessCompliance(
   console.error("=".repeat(60) + "\n");
   
   return response;
+}
+
+/**
+ * Save markdown documentation files
+ */
+async function saveDocumentationFiles(
+  documentation: ComplianceDocumentation,
+  assessment: {
+    overallScore: number;
+    riskLevel: string;
+    gaps: GapAnalysis[];
+    recommendations: Recommendation[];
+  },
+  organizationName?: string,
+  systemsAssessed?: string[]
+): Promise<string[]> {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, -5);
+  const orgName = organizationName?.replace(/[^a-zA-Z0-9]/g, "_") || "Organization";
+  
+  // Use process.cwd() to save in the project root's compliance-docs directory
+  // This ensures files are accessible regardless of where the code runs from
+  const projectRoot = process.cwd();
+  const docsDir = join(projectRoot, "compliance-docs", `${orgName}_${timestamp}`);
+  
+  // Create directory
+  await mkdir(docsDir, { recursive: true });
+  
+  const filePaths: string[] = [];
+  
+  // Save individual documentation templates
+  const docFiles: Array<{ name: string; content: string | undefined; article?: string }> = [
+    { name: "01_Risk_Management_System", content: documentation.riskManagementTemplate, article: "Article 9" },
+    { name: "02_Technical_Documentation", content: documentation.technicalDocumentation, article: "Article 11 / Annex IV" },
+    { name: "03_Conformity_Assessment", content: documentation.conformityAssessment, article: "Article 43" },
+    { name: "04_Transparency_Notice", content: documentation.transparencyNotice, article: "Article 50" },
+    { name: "05_Quality_Management_System", content: documentation.qualityManagementSystem, article: "Article 17" },
+    { name: "06_Human_Oversight_Procedure", content: documentation.humanOversightProcedure, article: "Article 14" },
+    { name: "07_Data_Governance_Policy", content: documentation.dataGovernancePolicy, article: "Article 10" },
+    { name: "08_Incident_Reporting_Procedure", content: documentation.incidentReportingProcedure },
+  ];
+  
+  for (const doc of docFiles) {
+    if (doc.content) {
+      const filePath = join(docsDir, `${doc.name}.md`);
+      const header = doc.article 
+        ? `# ${doc.name.replace(/_/g, " ")}\n\n**EU AI Act Reference:** ${doc.article}\n\n---\n\n`
+        : `# ${doc.name.replace(/_/g, " ")}\n\n---\n\n`;
+      await writeFile(filePath, header + doc.content, "utf-8");
+      filePaths.push(filePath);
+      console.error(`   💾 Saved: ${doc.name}.md`);
+    }
+  }
+  
+  // Generate comprehensive compliance report
+  const reportPath = join(docsDir, "00_Compliance_Assessment_Report.md");
+  const reportContent = generateComplianceReport(
+    assessment,
+    organizationName,
+    systemsAssessed
+  );
+  await writeFile(reportPath, reportContent, "utf-8");
+  filePaths.unshift(reportPath); // Add at beginning
+  console.error(`   💾 Saved: Compliance Assessment Report`);
+  
+  return filePaths;
+}
+
+/**
+ * Generate comprehensive compliance report markdown
+ */
+function generateComplianceReport(
+  assessment: {
+    overallScore: number;
+    riskLevel: string;
+    gaps: GapAnalysis[];
+    recommendations: Recommendation[];
+  },
+  organizationName?: string,
+  systemsAssessed?: string[]
+): string {
+  const now = new Date().toISOString();
+  
+  let report = `# EU AI Act Compliance Assessment Report\n\n`;
+  report += `**Assessment Date:** ${new Date(now).toLocaleDateString()}\n`;
+  report += `**Organization:** ${organizationName || "Not Specified"}\n`;
+  report += `**AI Systems Assessed:** ${systemsAssessed?.join(", ") || "Not Specified"}\n\n`;
+  report += `---\n\n`;
+  
+  // Executive Summary
+  report += `## Executive Summary\n\n`;
+  report += `**Overall Compliance Score:** ${assessment.overallScore}/100\n\n`;
+  report += `**Risk Level:** ${assessment.riskLevel}\n\n`;
+  report += `**Total Gaps Identified:** ${assessment.gaps.length}\n`;
+  report += `**Priority Recommendations:** ${assessment.recommendations.length}\n\n`;
+  
+  // Risk Assessment Summary
+  const criticalGaps = assessment.gaps.filter(g => g.severity === "CRITICAL");
+  const highGaps = assessment.gaps.filter(g => g.severity === "HIGH");
+  const mediumGaps = assessment.gaps.filter(g => g.severity === "MEDIUM");
+  const lowGaps = assessment.gaps.filter(g => g.severity === "LOW");
+  
+  report += `### Risk Assessment Summary\n\n`;
+  report += `- **Critical Gaps:** ${criticalGaps.length}\n`;
+  report += `- **High Priority Gaps:** ${highGaps.length}\n`;
+  report += `- **Medium Priority Gaps:** ${mediumGaps.length}\n`;
+  report += `- **Low Priority Gaps:** ${lowGaps.length}\n\n`;
+  
+  // Critical Gaps
+  if (criticalGaps.length > 0) {
+    report += `## Critical Compliance Gaps\n\n`;
+    for (const gap of criticalGaps) {
+      report += `### ${gap.category}: ${gap.description}\n\n`;
+      report += `- **Article Reference:** ${gap.articleReference}\n`;
+      report += `- **Affected Systems:** ${gap.affectedSystems.join(", ")}\n`;
+      report += `- **Current State:** ${gap.currentState}\n`;
+      report += `- **Required State:** ${gap.requiredState}\n`;
+      report += `- **Remediation Effort:** ${gap.remediationEffort}\n`;
+      if (gap.estimatedCost) {
+        report += `- **Estimated Cost:** ${gap.estimatedCost}\n`;
+      }
+      if (gap.deadline) {
+        report += `- **Compliance Deadline:** ${gap.deadline}\n`;
+      }
+      report += `\n`;
+    }
+  }
+  
+  // High Priority Gaps
+  if (highGaps.length > 0) {
+    report += `## High Priority Compliance Gaps\n\n`;
+    for (const gap of highGaps) {
+      report += `### ${gap.category}: ${gap.description}\n\n`;
+      report += `- **Article Reference:** ${gap.articleReference}\n`;
+      report += `- **Affected Systems:** ${gap.affectedSystems.join(", ")}\n`;
+      report += `- **Remediation Effort:** ${gap.remediationEffort}\n`;
+      if (gap.deadline) {
+        report += `- **Compliance Deadline:** ${gap.deadline}\n`;
+      }
+      report += `\n`;
+    }
+  }
+  
+  // Priority Recommendations
+  const sortedRecommendations = [...assessment.recommendations].sort((a, b) => a.priority - b.priority);
+  const topRecommendations = sortedRecommendations.slice(0, 10);
+  
+  if (topRecommendations.length > 0) {
+    report += `## Priority Recommendations\n\n`;
+    for (const rec of topRecommendations) {
+      report += `### ${rec.title} (Priority: ${rec.priority}/10)\n\n`;
+      report += `${rec.description}\n\n`;
+      report += `- **Article Reference:** ${rec.articleReference}\n`;
+      report += `- **Estimated Effort:** ${rec.estimatedEffort}\n`;
+      report += `- **Expected Outcome:** ${rec.expectedOutcome}\n\n`;
+      if (rec.implementationSteps.length > 0) {
+        report += `**Implementation Steps:**\n\n`;
+        for (const step of rec.implementationSteps) {
+          report += `1. ${step}\n`;
+        }
+        report += `\n`;
+      }
+      if (rec.dependencies && rec.dependencies.length > 0) {
+        report += `**Dependencies:** ${rec.dependencies.join(", ")}\n\n`;
+      }
+    }
+  }
+  
+  // All Gaps Summary Table
+  report += `## Complete Gap Analysis\n\n`;
+  report += `| Severity | Category | Description | Article | Systems Affected |\n`;
+  report += `|----------|----------|-------------|---------|------------------|\n`;
+  for (const gap of assessment.gaps) {
+    const desc = gap.description.replace(/\|/g, "\\|").substring(0, 100);
+    report += `| ${gap.severity} | ${gap.category} | ${desc}${desc.length >= 100 ? "..." : ""} | ${gap.articleReference} | ${gap.affectedSystems.join(", ")} |\n`;
+  }
+  report += `\n`;
+  
+  // Next Steps
+  report += `## Next Steps\n\n`;
+  report += `1. Review all critical and high-priority gaps\n`;
+  report += `2. Implement priority recommendations in order\n`;
+  report += `3. Complete technical documentation per Article 11\n`;
+  report += `4. Conduct conformity assessment per Article 43\n`;
+  report += `5. Register high-risk systems in EU database per Article 49\n`;
+  report += `6. Establish ongoing monitoring and compliance processes\n\n`;
+  
+  report += `---\n\n`;
+  report += `*This report was generated using AI-powered compliance assessment tools. `;
+  report += `Please review all recommendations with legal and compliance experts before implementation.*\n`;
+  
+  return report;
 }
 
 /**

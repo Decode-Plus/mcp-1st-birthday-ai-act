@@ -29,13 +29,22 @@ This tool researches an organization and creates a comprehensive profile includi
 - Provider role classification per Article 3(3)
 - Quality management system status per Article 17
 
-The tool automatically discovers the company domain from web research if not provided.
+IMPORTANT: For well-known companies, ALWAYS provide the domain parameter:
+- Microsoft → "microsoft.com"
+- IBM → "ibm.com"
+- Google → "google.com"
+- OpenAI → "openai.com"
+- Meta → "meta.com"
+- Amazon → "amazon.com"
+- Anthropic → "anthropic.com"
+- SAP → "sap.com"
+- Oracle → "oracle.com"
 
 Based on EU AI Act Articles 16 (Provider Obligations), 22 (Authorized Representatives), and 49 (Registration Requirements).`,
   
   parameters: z.object({
     organizationName: z.string().describe("Name of the organization to discover"),
-    domain: z.string().optional().describe("Organization's website domain (optional, will be auto-discovered)"),
+    domain: z.string().optional().describe("Organization's website domain (e.g., 'microsoft.com'). STRONGLY RECOMMENDED for accurate results."),
     context: z.string().optional().describe("Additional context about the organization (optional)"),
   }),
 

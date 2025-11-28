@@ -10,6 +10,7 @@ from gradio import ChatMessage
 import requests
 import json
 import os
+import threading
 from pathlib import Path
 from typing import List, Generator, Optional
 from dotenv import load_dotenv
@@ -52,6 +53,39 @@ current_model_settings = {
     "tavily_api_key": ""  # For web research
 }
 
+# Thread-safe cancellation flag for stopping ongoing requests
+class CancellationToken:
+    def __init__(self):
+        self._cancelled = False
+        self._lock = threading.Lock()
+        self._response = None
+    
+    def cancel(self):
+        with self._lock:
+            self._cancelled = True
+            # Close any active response to stop streaming
+            if self._response is not None:
+                try:
+                    self._response.close()
+                except:
+                    pass
+    
+    def is_cancelled(self):
+        with self._lock:
+            return self._cancelled
+    
+    def set_response(self, response):
+        with self._lock:
+            self._response = response
+    
+    def reset(self):
+        with self._lock:
+            self._cancelled = False
+            self._response = None
+
+# Global cancellation token
+cancel_token = CancellationToken()
+
 def format_tool_call(tool_name: str, args: dict) -> str:
     """Format a tool call for display"""
     args_str = json.dumps(args, indent=2) if args else "{}"
@@ -84,9 +118,18 @@ def format_tool_result(tool_name: str, result) -> str:
 </details>
 """
 
-def format_thinking_indicator() -> str:
+def format_thinking_indicator(tool_name: str = None) -> str:
     """Format a thinking/processing indicator"""
-    return "\n\n⏳ *Processing with MCP tools...*\n"
+    if tool_name:
+        # Show specific tool name if available
+        tool_display_name = {
+            "assess_compliance": "EU AI Act Compliance Assessment",
+            "discover_ai_services": "AI Systems Discovery",
+            "discover_organization": "Organization Discovery"
+        }.get(tool_name, tool_name.replace("_", " ").title())
+        
+        return f"\n\n⏳ **Processing: {tool_display_name}...**\n\n*This may take a moment while the tool analyzes data and generates documentation.*\n"
+    return "\n\n⏳ **Processing with MCP tools...**\n\n*Please wait while the tools execute...*\n"
 
 def get_api_headers() -> dict:
     """Get headers with model configuration for API requests
@@ -129,9 +172,14 @@ def chat_with_agent_streaming(message: str, history: list, initialized_history: 
     Yields:
         Updated history with streaming content
     """
+    global cancel_token
+    
     if not message.strip():
         yield initialized_history or history
         return
+    
+    # Reset cancellation token for new request
+    cancel_token.reset()
     
     # Use pre-initialized history or create one
     if initialized_history:
@@ -141,6 +189,10 @@ def chat_with_agent_streaming(message: str, history: list, initialized_history: 
             ChatMessage(role="user", content=message),
             ChatMessage(role="assistant", content="⏳ *Thinking...*")
         ]
+    
+    response = None
+    bot_response = ""
+    tool_calls_content = ""
     
     try:
         # Convert original history to API format (handle both ChatMessage and dict)
@@ -160,6 +212,9 @@ def chat_with_agent_streaming(message: str, history: list, initialized_history: 
             timeout=API_TIMEOUT,
         )
         
+        # Register response for potential cancellation
+        cancel_token.set_response(response)
+        
         if response.status_code != 200:
             error_msg = f"⚠️ Error: API returned status {response.status_code}"
             new_history[-1] = ChatMessage(role="assistant", content=error_msg)
@@ -167,11 +222,20 @@ def chat_with_agent_streaming(message: str, history: list, initialized_history: 
             return
         
         # Initialize assistant response
-        bot_response = ""
-        tool_calls_content = ""
         current_tool_call = None
         
         for line in response.iter_lines():
+            # Check for cancellation
+            if cancel_token.is_cancelled():
+                final_content = tool_calls_content + bot_response
+                if final_content:
+                    final_content += "\n\n*— Execution stopped by user*"
+                else:
+                    final_content = "*— Execution stopped by user*"
+                new_history[-1] = ChatMessage(role="assistant", content=final_content)
+                yield new_history
+                return
+            
             if line:
                 line_str = line.decode('utf-8')
                 print(f"[DEBUG] Received: {line_str[:100]}...")  # Debug log
@@ -189,19 +253,25 @@ def chat_with_agent_streaming(message: str, history: list, initialized_history: 
                             yield new_history
                             
                         elif event_type == "tool_call":
-                            # Show tool call (replaces loading indicator)
+                            # Show tool call with prominent loading indicator
                             tool_name = data.get("toolName", "unknown")
                             args = data.get("args", {})
                             tool_calls_content += format_tool_call(tool_name, args)
-                            new_history[-1] = ChatMessage(role="assistant", content=tool_calls_content + bot_response + format_thinking_indicator())
+                            # Add prominent loading indicator specific to this tool
+                            loading_indicator = format_thinking_indicator(tool_name)
+                            new_history[-1] = ChatMessage(role="assistant", content=tool_calls_content + bot_response + loading_indicator)
                             yield new_history
                             current_tool_call = tool_name
                             
+                            # Keep showing loading state periodically (in case tool takes long)
+                            # The indicator will be replaced when tool_result arrives
+                            
                         elif event_type == "tool_result":
-                            # Show tool result
+                            # Show tool result (removes loading indicator)
                             tool_name = data.get("toolName", current_tool_call or "unknown")
                             result = data.get("result")
                             tool_calls_content += format_tool_result(tool_name, result)
+                            # Remove loading indicator when result arrives
                             new_history[-1] = ChatMessage(role="assistant", content=tool_calls_content + bot_response)
                             yield new_history
                             current_tool_call = None
@@ -226,24 +296,42 @@ def chat_with_agent_streaming(message: str, history: list, initialized_history: 
                     except json.JSONDecodeError:
                         continue
         
-        # Ensure final state
-        final_content = tool_calls_content + (bot_response or "No response generated.")
-        new_history[-1] = ChatMessage(role="assistant", content=final_content)
-        yield new_history
+        # Ensure final state (only if not cancelled)
+        if not cancel_token.is_cancelled():
+            final_content = tool_calls_content + (bot_response or "No response generated.")
+            new_history[-1] = ChatMessage(role="assistant", content=final_content)
+            yield new_history
         
     except requests.exceptions.ConnectionError:
-        error_msg = "⚠️ Cannot connect to API server. Make sure it's running on http://localhost:3001"
-        new_history = new_history + [ChatMessage(role="assistant", content=error_msg)]
-        yield new_history
+        if not cancel_token.is_cancelled():
+            error_msg = "⚠️ Cannot connect to API server. Make sure it's running on http://localhost:3001"
+            new_history[-1] = ChatMessage(role="assistant", content=error_msg)
+            yield new_history
     except requests.exceptions.Timeout:
-        error_msg = "⚠️ Request timed out. The agent might be processing a complex query."
-        final_content = tool_calls_content + bot_response + "\n\n" + error_msg
-        new_history[-1] = ChatMessage(role="assistant", content=final_content)
-        yield new_history
+        if not cancel_token.is_cancelled():
+            error_msg = "⚠️ Request timed out. The agent might be processing a complex query."
+            final_content = tool_calls_content + bot_response + "\n\n" + error_msg
+            new_history[-1] = ChatMessage(role="assistant", content=final_content)
+            yield new_history
+    except (requests.exceptions.ChunkedEncodingError, ConnectionError):
+        # This can happen when we close the connection during cancellation - it's expected
+        if not cancel_token.is_cancelled():
+            error_msg = "⚠️ Connection was interrupted."
+            new_history[-1] = ChatMessage(role="assistant", content=tool_calls_content + bot_response + "\n\n" + error_msg)
+            yield new_history
     except Exception as e:
-        error_msg = f"⚠️ Error: {str(e)}"
-        new_history = new_history + [ChatMessage(role="assistant", content=error_msg)]
-        yield new_history
+        if not cancel_token.is_cancelled():
+            error_msg = f"⚠️ Error: {str(e)}"
+            new_history[-1] = ChatMessage(role="assistant", content=error_msg)
+            yield new_history
+    finally:
+        # Clean up the response connection
+        if response is not None:
+            try:
+                response.close()
+            except:
+                pass
+        cancel_token.set_response(None)
 
 def check_api_status() -> str:
     """Check if the API server is running"""
@@ -260,7 +348,7 @@ def check_api_status() -> str:
         return f"❌ Error: {str(e)}"
 
 def get_available_tools() -> str:
-    """Get list of available MCP tools"""
+    """Get list of available MCP tools with descriptions"""
     try:
         response = requests.get(f"{API_URL}/api/tools", timeout=5)
         if response.status_code == 200:
@@ -268,7 +356,15 @@ def get_available_tools() -> str:
             tools = data.get("tools", [])
             if tools:
                 tool_list = "\n".join([f"• **{t['name']}**" for t in tools])
-                return f"**Available MCP Tools:**\n{tool_list}"
+                return f"""**Available MCP Tools:**
+
+{tool_list}
+
+**✨ Capabilities:**
+• Generate complete compliance reports
+• Create documentation templates (Risk Management, Technical Docs, etc.)
+• Discover AI systems and assess risk levels
+• Analyze organization compliance gaps"""
             return "No tools available"
         return "Could not fetch tools"
     except:
@@ -277,11 +373,14 @@ def get_available_tools() -> str:
 def get_example_queries() -> List[List[str]]:
     """Get example queries for the interface"""
     return [
+        # MCP Tools Examples - Showcase full compliance analysis capabilities
+        ["Generate a complete EU AI Act compliance report for Microsoft with all documentation templates"],
+        ["Analyze IBM's watsonX system compliance and generate risk management documentation"],
+        ["Create full compliance assessment for OpenAI including technical documentation templates"],
+        # General Questions
         ["What is the EU AI Act?"],
-        ["Analyze OpenAI's EU AI Act compliance"],
         ["Is a recruitment screening AI considered high-risk?"],
         ["What are the compliance requirements for chatbots?"],
-        ["Generate compliance documentation for a recommendation system"],
         ["What's the timeline for EU AI Act enforcement?"],
     ]
 
@@ -332,7 +431,7 @@ with gr.Blocks(
             
             with gr.Row():
                 msg = gr.Textbox(
-                    placeholder="Ask about EU AI Act compliance, risk classification, or documentation...",
+                    placeholder="Ask about compliance, or request a full compliance report with documentation for an organization...",
                     show_label=False,
                     scale=8,
                 )
@@ -342,7 +441,7 @@ with gr.Blocks(
             gr.Examples(
                 examples=get_example_queries(),
                 inputs=msg,
-                label="💡 Example Questions",
+                label="💡 Example Questions (Try MCP tools for compliance reports & documentation!)",
             )
         
         with gr.Column(scale=1):
@@ -415,7 +514,7 @@ with gr.Blocks(
             
             tools_info = gr.Markdown(
                 value=get_available_tools(),
-                label="MCP Tools"
+                label="🔧 MCP Tools - Generate Reports & Documentation"
             )
             
             gr.Markdown("---")
@@ -527,9 +626,14 @@ with gr.Blocks(
     # Event handlers - clear input immediately and stream response together
     def respond_and_clear(message: str, history: list):
         """Wrapper that yields (cleared_input, chat_history, stop_visible) tuples"""
+        global cancel_token
+        
         if not message.strip():
             yield "", history, gr.update(visible=False)
             return
+        
+        # Reset cancellation token for new request
+        cancel_token.reset()
             
         # First yield: clear input, show loading, and show stop button
         model_name = AVAILABLE_MODELS.get(current_model_settings["model"], {}).get("name", current_model_settings["model"])
@@ -540,29 +644,36 @@ with gr.Blocks(
         yield "", initial_history, gr.update(visible=True)
         
         # Stream the actual response (pass initialized_history to avoid duplication)
+        updated_history = initial_history  # Initialize in case generator doesn't yield
         for updated_history in chat_with_agent_streaming(message, history, initial_history):
+            # Check if cancelled during streaming
+            if cancel_token.is_cancelled():
+                break
             yield "", updated_history, gr.update(visible=True)
         
         # Final yield: hide stop button when done
         yield "", updated_history, gr.update(visible=False)
     
     def stop_response(history: list):
-        """Stop the current response and add a stopped message"""
+        """Stop the current response by triggering cancellation"""
+        global cancel_token
+        
+        # Trigger cancellation - this will close the HTTP connection
+        cancel_token.cancel()
+        
+        # Update history to show stopped state (the generator will also update when it detects cancellation)
         if history and len(history) > 0:
-            # Check if the last message is still loading/thinking
             last_msg = history[-1]
-            if isinstance(last_msg, ChatMessage) and "⏳" in last_msg.content:
-                # Update the last message to show it was stopped
-                history[-1] = ChatMessage(
-                    role="assistant", 
-                    content=last_msg.content.replace("⏳", "⏹️") + "\n\n*— Execution stopped by user*"
-                )
-            elif isinstance(last_msg, ChatMessage):
-                # Append stopped message to existing content
-                history[-1] = ChatMessage(
-                    role="assistant",
-                    content=last_msg.content + "\n\n*— Execution stopped by user*"
-                )
+            if isinstance(last_msg, ChatMessage):
+                content = last_msg.content
+                # Remove thinking indicator and add stopped message
+                if "⏳" in content:
+                    content = content.replace("⏳ *Thinking", "⏹️ *Stopped")
+                    content = content.replace("⏳ *Processing", "⏹️ *Stopped")
+                if "*— Execution stopped by user*" not in content:
+                    content += "\n\n*— Execution stopped by user*"
+                history[-1] = ChatMessage(role="assistant", content=content)
+        
         # Return history and hide stop button
         return history, gr.update(visible=False)
     

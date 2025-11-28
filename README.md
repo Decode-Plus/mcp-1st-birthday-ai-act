@@ -233,7 +233,10 @@ Takes organization and service context to produce:
       "command": "npx",
       "args": ["@eu-ai-act/mcp-server"],
       "env": {
-        "TAVILY_API_KEY": "tvly-YOUR_API_KEY"
+        "TAVILY_API_KEY": "tvly-YOUR_API_KEY",
+        "XAI_API_KEY": "xai-YOUR_KEY",
+        "ANTHROPIC_API_KEY": "sk-ant-YOUR_KEY",
+        "OPENAI_API_KEY": "sk-YOUR_KEY"
       }
     }
   }
@@ -326,6 +329,7 @@ An interactive AI agent that guides organizations through the entire compliance 
 | **Real-time Assessment**     | Instant feedback on compliance status                |
 | **Document Generation**      | Auto-generated templates and reports                 |
 | **Export Options**           | Download compliance documentation                    |
+| **Model Selection**          | Choose between Claude 4-5, GPT-5, or Grok 4-1        |
 
 ### 🛠️ Tech Stack
 
@@ -333,7 +337,7 @@ An interactive AI agent that guides organizations through the entire compliance 
 - **[Gradio](https://gradio.app/)** — Interactive web UI with chat interface
 - **[Express](https://expressjs.com/)** — REST API server
 - **[MCP](https://modelcontextprotocol.io/)** — Tool integration protocol
-- **[xAI Grok 4.1 Reasoning](https://x.ai/)** — Language model for intelligent responses
+- **AI Models** — Choose from Claude 4-5 (Anthropic), GPT-5 (OpenAI), or Grok 4-1 (xAI) for intelligent responses
 
 ### 🚀 Quick Start
 
@@ -343,8 +347,14 @@ pnpm install
 cd apps/eu-ai-act-agent
 pip3 install -r requirements.txt
 
-# Set API key
-export XAI_API_KEY="xai-your-key"
+# Set API keys (required)
+export TAVILY_API_KEY="tvly-your-tavily-key"  # Required - Get from https://app.tavily.com
+# Choose one model and set its API key:
+export XAI_API_KEY="xai-your-key"              # For Grok 4-1
+# OR
+export ANTHROPIC_API_KEY="sk-ant-your-key"     # For Claude 4-5
+# OR
+export OPENAI_API_KEY="sk-your-key"             # For GPT-5
 
 # Start everything
 ./start.sh
@@ -362,7 +372,12 @@ See [apps/eu-ai-act-agent/QUICKSTART.md](apps/eu-ai-act-agent/QUICKSTART.md) for
 - Node.js 18+
 - pnpm 8+
 - Python 3.9+ with uv (fast package manager)
-- API key for LLM provider
+- **Tavily API key** (required) - Get your free API key from [app.tavily.com](https://app.tavily.com)
+- **Model selection** - Choose one of the following models:
+  - **Claude 4-5** (Anthropic) - API key required
+  - **GPT-5** (OpenAI) - API key required
+  - **Grok 4-1** (xAI) - API key required
+- **API key for your selected model** - Provide the corresponding API key based on your model choice
 
 ### Installation
 
@@ -383,7 +398,12 @@ cd ../..
 
 # Set up environment variables
 cp .env.example .env
-# Edit .env and add your XAI_API_KEY and TAVILY_API_KEY
+# Edit .env and add:
+# - TAVILY_API_KEY (required) - Get from https://app.tavily.com
+# - Model API key (choose one):
+#   * ANTHROPIC_API_KEY (for Claude 4-5)
+#   * OPENAI_API_KEY (for GPT-5)
+#   * XAI_API_KEY (for Grok 4-1)
 
 # Build the MCP server
 pnpm --filter @eu-ai-act/mcp-server build
@@ -489,7 +509,12 @@ cd eu-ai-act-compliance
 
 ```bash
 docker build -t eu-ai-act-compliance -f spaces/eu-ai-act-compliance/Dockerfile spaces/eu-ai-act-compliance
-docker run -p 7860:7860 -e XAI_API_KEY=your-key eu-ai-act-compliance
+docker run -p 7860:7860 \
+  -e TAVILY_API_KEY=your-tavily-key \
+  -e ANTHROPIC_API_KEY=your-key \
+  -e OPENAI_API_KEY=your-key \
+  -e XAI_API_KEY=your-key \
+  eu-ai-act-compliance
 ```
 
 📖 **[Full Deployment Guide →](DEPLOYMENT.md)**

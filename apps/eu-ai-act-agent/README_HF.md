@@ -69,8 +69,8 @@ The **EU AI Act Compliance Agent** helps organizations understand and comply wit
 ## 🛠️ Tech Stack
 
 - **Vercel AI SDK v5** — Agent orchestration
-- **xAI Grok 4.1** — Language model
-- **Tavily AI** — Web research
+- **AI Models** — Claude 4-5, GPT-5, or Grok 4-1 (user selectable)
+- **Tavily AI** — Web research (required)
 - **MCP** — Model Context Protocol
 - **Gradio** — Web UI
 
@@ -78,10 +78,13 @@ The **EU AI Act Compliance Agent** helps organizations understand and comply wit
 
 ## 🔐 Required Secrets
 
-| Secret           | Required | Description             |
-| ---------------- | -------- | ----------------------- |
-| `XAI_API_KEY`    | Yes      | xAI API key             |
-| `TAVILY_API_KEY` | Optional | Tavily for web research |
+| Secret                      | Required | Description                                      |
+| --------------------------- | -------- | ------------------------------------------------ |
+| `TAVILY_API_KEY`            | Yes      | Tavily API key (get from https://app.tavily.com) |
+| Model API Key (choose one): | Yes      | Select one model and provide its API key:        |
+| `ANTHROPIC_API_KEY`         | Optional | For Claude 4-5 model                             |
+| `OPENAI_API_KEY`            | Optional | For GPT-5 model                                  |
+| `XAI_API_KEY`               | Optional | For Grok 4-1 model                               |
 
 ---
 

@@ -49,18 +49,31 @@ This MCP server uses **Tavily AI** for intelligent company research and organiza
    - Sign up for a free account (1,000 API credits/month)
    - Copy your API key
 
-2. **Configure the API key**:
+2. **Configure the API keys**:
 
    Create a `.env` file in the project root:
    ```bash
+   # Required: Tavily API key for web research
    TAVILY_API_KEY=tvly-YOUR_API_KEY
-   XAI_API_KEY=xai-YOUR_XAI_KEY  # Required for assess_compliance tool
+   
+   # Required: Choose one model and provide its API key
+   # For Claude 4-5:
+   ANTHROPIC_API_KEY=sk-ant-YOUR_KEY
+   # OR for GPT-5:
+   OPENAI_API_KEY=sk-YOUR_KEY
+   # OR for Grok 4-1:
+   XAI_API_KEY=xai-YOUR_KEY
    ```
 
-   Or set as environment variable:
+   Or set as environment variables:
    ```bash
    export TAVILY_API_KEY=tvly-YOUR_API_KEY
-   export XAI_API_KEY=xai-YOUR_XAI_KEY
+   # Choose one model:
+   export ANTHROPIC_API_KEY=sk-ant-YOUR_KEY  # For Claude 4-5
+   # OR
+   export OPENAI_API_KEY=sk-YOUR_KEY         # For GPT-5
+   # OR
+   export XAI_API_KEY=xai-YOUR_KEY           # For Grok 4-1
    ```
 
 3. **For Claude Desktop**, add the environment variables to your config:
@@ -73,12 +86,16 @@ This MCP server uses **Tavily AI** for intelligent company research and organiza
          "args": ["/path/to/packages/eu-ai-act-mcp/dist/index.js"],
          "env": {
            "TAVILY_API_KEY": "tvly-YOUR_API_KEY",
-           "XAI_API_KEY": "xai-YOUR_XAI_KEY"
+           "ANTHROPIC_API_KEY": "sk-ant-YOUR_KEY",
+           "OPENAI_API_KEY": "sk-YOUR_KEY",
+           "XAI_API_KEY": "xai-YOUR_KEY"
          }
        }
      }
    }
    ```
+   
+   **Note**: You only need to set the API key for the model you want to use (Claude 4-5, GPT-5, or Grok 4-1).
 
 ### How Tavily Enhances Organization Discovery
 
@@ -352,7 +369,7 @@ Discovers and classifies AI systems within an organization according to EU AI Ac
 
 ### 3. `assess_compliance`
 
-AI-powered compliance assessment and documentation generator using Grok 4.1 reasoning models.
+AI-powered compliance assessment and documentation generator using Claude 4-5, GPT-5, or Grok 4-1 (user selectable).
 
 **Input:**
 ```json
@@ -413,7 +430,7 @@ AI-powered compliance assessment and documentation generator using Grok 4.1 reas
   metadata: {
     assessmentDate: string;
     assessmentVersion: string;
-    modelUsed: string;           // e.g., "grok-4-1-fast-reasoning"
+    modelUsed: string;           // e.g., "claude-4-5", "gpt-5", or "grok-4-1"
     organizationAssessed?: string;
     systemsAssessed: string[];
     focusAreas: string[];
@@ -436,8 +453,12 @@ AI-powered compliance assessment and documentation generator using Grok 4.1 reas
 - Annex IV (Technical Documentation Requirements)
 
 **Requirements:**
-- `XAI_API_KEY` environment variable must be set
-- Uses Grok 4.1 reasoning models for intelligent compliance analysis
+- `TAVILY_API_KEY` environment variable must be set (required)
+- One of the following model API keys must be set:
+  - `ANTHROPIC_API_KEY` for Claude 4-5
+  - `OPENAI_API_KEY` for GPT-5
+  - `XAI_API_KEY` for Grok 4-1
+- Uses the selected model for intelligent compliance analysis
 - Generates professional documentation templates in Markdown
 
 ## Testing
@@ -454,7 +475,7 @@ The test agent will:
 2. List available tools
 3. Test organization discovery
 4. Test AI services discovery
-5. Test AI-powered compliance assessment (requires `XAI_API_KEY`)
+5. Test AI-powered compliance assessment (requires `TAVILY_API_KEY` and one model API key: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `XAI_API_KEY`)
 6. Display compliance gaps and recommendations
 7. Show generated documentation templates
 
@@ -528,7 +549,7 @@ app.listen(3000, () => {
          │  └─────────────────────┘    │
          │                             │
          │  ┌─────────────────────┐    │
-         │  │  assess_            │◄──┼──── xAI Grok 4.1 Reasoning
+         │  │  assess_            │◄──┼──── AI Model (Claude 4-5 / GPT-5 / Grok 4-1)
          │  │  compliance         │    │
          │  └─────────────────────┘    │
          └─────────────────────────────┘

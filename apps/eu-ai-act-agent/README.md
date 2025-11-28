@@ -60,9 +60,12 @@ An interactive AI agent with Gradio UI for navigating EU AI Act compliance requi
 
 - **Node.js** 18+ and pnpm 8+
 - **Python** 3.9+ with uv (fast package manager)
-- **API Keys**:
-  - xAI API key (required)
-  - Tavily API key (optional, for enhanced research)
+- **Tavily API key** (required) - Get your free API key from [app.tavily.com](https://app.tavily.com)
+- **Model selection** - Choose one of the following models:
+  - **Claude 4-5** (Anthropic) - API key required
+  - **GPT-5** (OpenAI) - API key required
+  - **Grok 4-1** (xAI) - API key required
+- **API key for your selected model** - Provide the corresponding API key based on your model choice
 
 ### Installation
 
@@ -83,7 +86,12 @@ uv pip install -r requirements.txt
 3. **Set up environment variables**:
 ```bash
 cp .env.example .env
-# Edit .env and add your XAI_API_KEY and TAVILY_API_KEY
+# Edit .env and add:
+# - TAVILY_API_KEY (required) - Get from https://app.tavily.com
+# - Model API key (choose one):
+#   * ANTHROPIC_API_KEY (for Claude 4-5)
+#   * OPENAI_API_KEY (for GPT-5)
+#   * XAI_API_KEY (for Grok 4-1)
 ```
 
 ### Running the Agent
@@ -162,9 +170,12 @@ Agent: I'll assess your chatbot and generate the required documents...
 
 ### API Server (`src/server.ts`)
 - **Port**: Configure via `PORT` env var (default: 3001)
-- **Model**: Configured to use Grok 4.1 reasoning models
+- **Model**: Select between Claude 4-5, GPT-5, or Grok 4-1 (set corresponding API key)
 - **Streaming**: Enabled for real-time responses
 - **CORS**: Configured for Gradio origin
+- **Required Environment Variables**:
+  - `TAVILY_API_KEY` (required)
+  - One of: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `XAI_API_KEY` (based on model selection)
 
 ### Gradio UI (`src/gradio_app.py`)
 - **Theme**: Custom EU-themed design
@@ -232,7 +243,8 @@ curl -X POST http://localhost:3001/api/chat \
 
 - **Backend**: Node.js + Express + TypeScript
 - **AI SDK**: Vercel AI SDK v5 (upgraded from v4)
-- **LLM**: xAI Grok 4.1 Reasoning Models
+- **LLM**: Claude 4-5, GPT-5, or Grok 4-1 (user selectable)
+- **Research**: Tavily AI for web research
 - **Frontend**: Gradio (Python)
 - **MCP**: Model Context Protocol for tool integration
 - **Monorepo**: Turborepo for efficient builds

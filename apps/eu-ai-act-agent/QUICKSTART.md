@@ -8,8 +8,14 @@ Get the EU AI Act Compliance Agent running in under 5 minutes!
 # 1. Install uv (fast Python package manager)
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# 2. Set your OpenAI API key
-export OPENAI_API_KEY="sk-your-key-here"
+# 2. Set your API keys (required)
+export TAVILY_API_KEY="tvly-your-tavily-key"  # Required - Get from https://app.tavily.com
+# Choose one model and set its API key:
+export ANTHROPIC_API_KEY="sk-ant-your-key"    # For Claude 4-5
+# OR
+export OPENAI_API_KEY="sk-your-key"           # For GPT-5
+# OR
+export XAI_API_KEY="xai-your-key"             # For Grok 4-1
 
 # 3. Install dependencies (from workspace root)
 cd /path/to/mcp-1st-birthday-ai-act
@@ -39,16 +45,30 @@ Install these first:
 
 ### 2. Get API Keys
 
-**OpenAI (Required)**:
+**Tavily (Required)**:
+1. Sign up at https://app.tavily.com
+2. Get your API key (1,000 free credits/month)
+3. Copy it (starts with `tvly-`)
+
+**Model Selection (Required - Choose One)**:
+
+**Option A: Claude 4-5 (Anthropic)**:
+1. Sign up at https://console.anthropic.com/
+2. Go to API Keys section
+3. Create a new key
+4. Copy it (starts with `sk-ant-`)
+
+**Option B: GPT-5 (OpenAI)**:
 1. Sign up at https://platform.openai.com/
 2. Go to API Keys section
 3. Create a new key
 4. Copy it (starts with `sk-`)
 
-**Tavily (Optional but recommended)**:
-1. Sign up at https://app.tavily.com
-2. Get your API key (1,000 free credits/month)
-3. Copy it (starts with `tvly-`)
+**Option C: Grok 4-1 (xAI)**:
+1. Sign up at https://x.ai/
+2. Go to API Keys section
+3. Create a new key
+4. Copy it (starts with `xai-`)
 
 ### 3. Clone & Setup
 
@@ -80,8 +100,17 @@ cd ../..
 
 # Create .env file
 cat > .env << EOF
-OPENAI_API_KEY=sk-your-openai-api-key-here
+# Required: Tavily API key
 TAVILY_API_KEY=tvly-your-tavily-api-key-here
+
+# Required: Choose one model and provide its API key
+# For Claude 4-5:
+ANTHROPIC_API_KEY=sk-ant-your-key-here
+# OR for GPT-5:
+OPENAI_API_KEY=sk-your-openai-api-key-here
+# OR for Grok 4-1:
+XAI_API_KEY=xai-your-key-here
+
 PORT=3001
 EOF
 ```
@@ -189,17 +218,26 @@ cd apps/eu-ai-act-agent
 pnpm dev
 ```
 
-### "OpenAI API error"
+### "API key error" or "Model not found"
 
 **Solution**:
 ```bash
-# Verify your API key is set
-echo $OPENAI_API_KEY
+# Verify your Tavily API key is set
+echo $TAVILY_API_KEY
+
+# Verify your model API key is set (check which one you're using)
+echo $ANTHROPIC_API_KEY  # For Claude 4-5
+echo $OPENAI_API_KEY     # For GPT-5
+echo $XAI_API_KEY        # For Grok 4-1
 
 # Or check .env file
-cat ../../.env | grep OPENAI_API_KEY
+cat ../../.env | grep -E "(TAVILY|ANTHROPIC|OPENAI|XAI)_API_KEY"
 
-# Make sure it's valid at https://platform.openai.com/api-keys
+# Make sure your API keys are valid:
+# - Tavily: https://app.tavily.com
+# - Claude: https://console.anthropic.com/api-keys
+# - OpenAI: https://platform.openai.com/api-keys
+# - xAI: https://x.ai/api-keys
 ```
 
 ### "Module not found" errors

@@ -13,6 +13,182 @@ import { getBrandingInfo } from "../utils/branding.js";
 import { findCompanyDomain } from "../utils/domain.js";
 
 /**
+ * Well-known company domains mapping
+ * Used as fallback when domain is not provided
+ */
+const KNOWN_COMPANY_DOMAINS: Record<string, string> = {
+  // Tech Giants
+  "microsoft": "microsoft.com",
+  "google": "google.com",
+  "alphabet": "abc.xyz",
+  "apple": "apple.com",
+  "amazon": "amazon.com",
+  "meta": "meta.com",
+  "facebook": "meta.com",
+  "ibm": "ibm.com",
+  "oracle": "oracle.com",
+  "salesforce": "salesforce.com",
+  "sap": "sap.com",
+  "adobe": "adobe.com",
+  "nvidia": "nvidia.com",
+  "intel": "intel.com",
+  "cisco": "cisco.com",
+  "dell": "dell.com",
+  "hp": "hp.com",
+  "vmware": "vmware.com",
+  "servicenow": "servicenow.com",
+  "workday": "workday.com",
+  "snowflake": "snowflake.com",
+  "databricks": "databricks.com",
+  "palantir": "palantir.com",
+  
+  // AI Companies
+  "openai": "openai.com",
+  "anthropic": "anthropic.com",
+  "deepmind": "deepmind.com",
+  "cohere": "cohere.com",
+  "stability ai": "stability.ai",
+  "hugging face": "huggingface.co",
+  "huggingface": "huggingface.co",
+  "midjourney": "midjourney.com",
+  "runway": "runwayml.com",
+  "mistral": "mistral.ai",
+  "mistral ai": "mistral.ai",
+  "xai": "x.ai",
+  "inflection": "inflection.ai",
+  "inflection ai": "inflection.ai",
+  "perplexity": "perplexity.ai",
+  "perplexity ai": "perplexity.ai",
+  
+  // Cloud Providers
+  "aws": "aws.amazon.com",
+  "amazon web services": "aws.amazon.com",
+  "azure": "azure.microsoft.com",
+  "google cloud": "cloud.google.com",
+  "gcp": "cloud.google.com",
+  
+  // European Tech
+  "spotify": "spotify.com",
+  "klarna": "klarna.com",
+  "adyen": "adyen.com",
+  "booking.com": "booking.com",
+  "booking": "booking.com",
+  "asml": "asml.com",
+  "siemens": "siemens.com",
+  "bosch": "bosch.com",
+  "philips": "philips.com",
+  "ericsson": "ericsson.com",
+  "nokia": "nokia.com",
+  "uipath": "uipath.com",
+  "arm": "arm.com",
+  "deliveroo": "deliveroo.com",
+  "revolut": "revolut.com",
+  "wise": "wise.com",
+  "transferwise": "wise.com",
+  
+  // Financial Services
+  "jpmorgan": "jpmorgan.com",
+  "jp morgan": "jpmorgan.com",
+  "goldman sachs": "goldmansachs.com",
+  "morgan stanley": "morganstanley.com",
+  "blackrock": "blackrock.com",
+  "visa": "visa.com",
+  "mastercard": "mastercard.com",
+  "paypal": "paypal.com",
+  "stripe": "stripe.com",
+  "square": "squareup.com",
+  "block": "block.xyz",
+  
+  // Healthcare/Pharma
+  "pfizer": "pfizer.com",
+  "johnson & johnson": "jnj.com",
+  "j&j": "jnj.com",
+  "roche": "roche.com",
+  "novartis": "novartis.com",
+  "merck": "merck.com",
+  "abbvie": "abbvie.com",
+  "astrazeneca": "astrazeneca.com",
+  "gsk": "gsk.com",
+  "glaxosmithkline": "gsk.com",
+  "sanofi": "sanofi.com",
+  "bayer": "bayer.com",
+  
+  // Automotive
+  "tesla": "tesla.com",
+  "volkswagen": "volkswagen.com",
+  "vw": "volkswagen.com",
+  "bmw": "bmw.com",
+  "mercedes": "mercedes-benz.com",
+  "mercedes-benz": "mercedes-benz.com",
+  "toyota": "toyota.com",
+  "ford": "ford.com",
+  "gm": "gm.com",
+  "general motors": "gm.com",
+  "rivian": "rivian.com",
+  "lucid": "lucidmotors.com",
+  "waymo": "waymo.com",
+  "cruise": "getcruise.com",
+  
+  // Retail/E-commerce
+  "walmart": "walmart.com",
+  "target": "target.com",
+  "costco": "costco.com",
+  "alibaba": "alibaba.com",
+  "shopify": "shopify.com",
+  "ebay": "ebay.com",
+  "etsy": "etsy.com",
+  
+  // Social/Media
+  "twitter": "x.com",
+  "x": "x.com",
+  "linkedin": "linkedin.com",
+  "tiktok": "tiktok.com",
+  "bytedance": "bytedance.com",
+  "snap": "snap.com",
+  "snapchat": "snap.com",
+  "pinterest": "pinterest.com",
+  "reddit": "reddit.com",
+  "discord": "discord.com",
+  "zoom": "zoom.us",
+  "slack": "slack.com",
+  "netflix": "netflix.com",
+  "disney": "disney.com",
+  
+  // Consulting
+  "accenture": "accenture.com",
+  "deloitte": "deloitte.com",
+  "pwc": "pwc.com",
+  "kpmg": "kpmg.com",
+  "ey": "ey.com",
+  "ernst & young": "ey.com",
+  "mckinsey": "mckinsey.com",
+  "bcg": "bcg.com",
+  "boston consulting group": "bcg.com",
+  "bain": "bain.com",
+};
+
+/**
+ * Get known domain for a company name
+ */
+function getKnownDomain(companyName: string): string | undefined {
+  const normalizedName = companyName.toLowerCase().trim();
+  
+  // Direct match
+  if (KNOWN_COMPANY_DOMAINS[normalizedName]) {
+    return KNOWN_COMPANY_DOMAINS[normalizedName];
+  }
+  
+  // Try partial match (e.g., "Microsoft Corporation" → "microsoft")
+  for (const [key, domain] of Object.entries(KNOWN_COMPANY_DOMAINS)) {
+    if (normalizedName.includes(key) || key.includes(normalizedName)) {
+      return domain;
+    }
+  }
+  
+  return undefined;
+}
+
+/**
  * Extract comprehensive organization data from Tavily search results
  * Extracts all fields needed for enrichWithAIActContext
  */
@@ -321,8 +497,15 @@ async function researchOrganization(
     // Auto-discover domain if not provided
     let discoveredDomain = domain;
     if (!discoveredDomain) {
-      console.error("\n🔎 Auto-discovering company domain from search results...");
-      discoveredDomain = findCompanyDomain(searchResults, name);
+      // First, check if it's a known company
+      const knownDomain = getKnownDomain(name);
+      if (knownDomain) {
+        console.error(`\n✅ Using known company domain: ${knownDomain}`);
+        discoveredDomain = knownDomain;
+      } else {
+        console.error("\n🔎 Auto-discovering company domain from search results...");
+        discoveredDomain = findCompanyDomain(searchResults, name);
+      }
     } else {
       console.error(`\n✅ Using provided domain: ${discoveredDomain}`);
     }
