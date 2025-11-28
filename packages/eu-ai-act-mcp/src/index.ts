@@ -75,23 +75,23 @@ Based on EU AI Act Articles 16 (Provider Obligations), 22 (Authorized Representa
     console.error(`[discover_organization] Called with: organizationName="${organizationName}", domain="${domain}", context="${context}"`);
     
     try {
-      // Execute tool
-      const result = await discoverOrganization({
-        organizationName,
-        domain,
-        context,
-      });
-      
-      console.error(`[discover_organization] Completed, result has ${JSON.stringify(result).length} chars`);
-      
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(result, null, 2),
-          },
-        ],
-      };
+    // Execute tool
+    const result = await discoverOrganization({
+      organizationName,
+      domain,
+      context,
+    });
+    
+    console.error(`[discover_organization] Completed, result has ${JSON.stringify(result).length} chars`);
+    
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
     } catch (error) {
       console.error(`[discover_organization] Error:`, error);
       return {
@@ -136,24 +136,24 @@ Generates reports for systems requiring immediate attention with EU database reg
     console.error(`[discover_ai_services] Called with: systemNames=${JSON.stringify(systemNames)}, scope="${scope}"`);
     
     try {
-      // Execute tool
-      const result = await discoverAIServices({
-        organizationContext,
-        systemNames,
-        scope,
-        context,
-      });
-      
-      console.error(`[discover_ai_services] Completed, found ${result.systems?.length || 0} systems`);
-      
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(result, null, 2),
-          },
-        ],
-      };
+    // Execute tool
+    const result = await discoverAIServices({
+      organizationContext,
+      systemNames,
+      scope,
+      context,
+    });
+    
+    console.error(`[discover_ai_services] Completed, found ${result.systems?.length || 0} systems`);
+    
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
     } catch (error) {
       console.error(`[discover_ai_services] Error:`, error);
       return {
@@ -208,24 +208,24 @@ Requires XAI_API_KEY environment variable to be set.`,
     console.error(`[assess_compliance] Called with: focusAreas=${JSON.stringify(focusAreas)}, generateDocumentation=${generateDocumentation}`);
     
     try {
-      // Execute tool
-      const result = await assessCompliance({
-        organizationContext,
-        aiServicesContext,
-        focusAreas,
-        generateDocumentation,
-      });
-      
-      console.error(`[assess_compliance] Completed, score: ${result.assessment?.overallScore || 'N/A'}`);
-      
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(result, null, 2),
-          },
-        ],
-      };
+    // Execute tool
+    const result = await assessCompliance({
+      organizationContext,
+      aiServicesContext,
+      focusAreas,
+      generateDocumentation,
+    });
+    
+    console.error(`[assess_compliance] Completed, score: ${result.assessment?.overallScore || 'N/A'}`);
+    
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
     } catch (error) {
       console.error(`[assess_compliance] Error:`, error);
       return {

@@ -460,16 +460,61 @@ Claude: I'll help you assess your AI Act compliance. Let me start by
 
 ---
 
+## 🚀 Deployment
+
+### Try the Live Demo
+
+🎯 **[Launch EU AI Act Compliance Agent →](https://huggingface.co/spaces/MCP-1st-Birthday/eu-ai-act-compliance)**
+
+### Deploy Your Own Instance
+
+#### Option 1: Hugging Face Spaces (Recommended)
+
+```bash
+# Clone and deploy to HF Spaces
+git clone https://github.com/your-org/eu-ai-act-compliance.git
+cd eu-ai-act-compliance
+
+# Run deployment script
+./scripts/deploy-hf.sh --org YOUR_ORG --name eu-ai-act-compliance
+```
+
+#### Option 2: GitHub Actions (Auto-Deploy)
+
+1. Fork this repository
+2. Add `HF_TOKEN` secret to your GitHub repo
+3. Push to `main` - auto-deploys to HF Spaces
+
+#### Option 3: Docker
+
+```bash
+docker build -t eu-ai-act-compliance -f spaces/eu-ai-act-compliance/Dockerfile spaces/eu-ai-act-compliance
+docker run -p 7860:7860 -e XAI_API_KEY=your-key eu-ai-act-compliance
+```
+
+📖 **[Full Deployment Guide →](DEPLOYMENT.md)**
+
+---
+
 ## 🏆 Hackathon Submission
 
 This project is our entry to the **[MCP 1st Birthday Hackathon](https://huggingface.co/MCP-1st-Birthday)**.
 
-| Category   | Our Entry                                 |
-| ---------- | ----------------------------------------- |
-| **Event**  | MCP 1st Birthday Hackathon                |
-| **Tracks** | Track 1 (MCP Server) + Track 2 (AI Agent) |
-| **Theme**  | Legal Tech / AI Governance                |
-| **Status** | 🚧 In Development                          |
+| Category   | Our Entry                                                                       |
+| ---------- | ------------------------------------------------------------------------------- |
+| **Event**  | MCP 1st Birthday Hackathon                                                      |
+| **Tracks** | Track 1 (MCP Server) + Track 2 (AI Agent)                                       |
+| **Theme**  | Legal Tech / AI Governance                                                      |
+| **Status** | ✅ Submitted                                                                     |
+| **Demo**   | [HF Space](https://huggingface.co/spaces/MCP-1st-Birthday/eu-ai-act-compliance) |
+
+### Submission Checklist
+
+- [x] MCP Server with 3 compliance tools
+- [x] AI Agent with Gradio UI
+- [x] Deployed to Hugging Face Spaces
+- [x] Documentation complete
+- [ ] Social media post shared
 
 ---
 

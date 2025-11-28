@@ -1,0 +1,38 @@
+name: Deploy to Hugging Face Spaces
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  HF_SPACE: MCP-1st-Birthday/eu-ai-act-compliance-agent
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Push to Hugging Face Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          # Configure git
+          git config --global user.email "github-actions@github.com"
+          git config --global user.name "GitHub Actions"
+          
+          # Copy Space files from apps/eu-ai-act-agent to root
+          cp apps/eu-ai-act-agent/README_HF.md ./README.md
+          cp apps/eu-ai-act-agent/Dockerfile ./Dockerfile
+          
+          # Add HF Space remote and push
+          git remote add hf https://user:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE} || true
+          git add -A
+          git commit -m "Deploy to HF Spaces" --allow-empty
+          git push hf main:main --force
+          
+          echo "✅ Deployed to https://huggingface.co/spaces/${HF_SPACE}"

@@ -169,36 +169,49 @@ app.post("/api/chat", async (req, res) => {
     if (needsAssessment && !hasText) {
       console.log("⚠️ Organization tools called but assess_compliance missing. Making follow-up request...");
       
-      // Build context from tool results
+      // Build context from tool results - these are the FULL results from the previous tools
       const orgContext = toolResults.get("discover_organization");
       const aiServicesContext = toolResults.get("discover_ai_services");
       
-      // Create a more explicit follow-up message that includes the context
-      const contextSummary = `
-Tool results received:
-- discover_organization: Found ${orgContext?.organization?.name || "organization"} (${orgContext?.organization?.sector || "unknown sector"})
-- discover_ai_services: Found ${aiServicesContext?.systems?.length || 0} AI systems
+      // Create a follow-up message that includes the COMPLETE tool results as JSON
+      // This ensures the model has all the data needed to call assess_compliance correctly
+      const fullContextMessage = `
+I have received the complete results from the previous tools. Now I need you to call assess_compliance with the FULL context.
 
-Now call assess_compliance with these parameters:
-- organizationContext: Use the discover_organization result
-- aiServicesContext: Use the discover_ai_services result  
+## COMPLETE ORGANIZATION CONTEXT (from discover_organization):
+\`\`\`json
+${JSON.stringify(orgContext, null, 2)}
+\`\`\`
+
+## COMPLETE AI SERVICES CONTEXT (from discover_ai_services):
+\`\`\`json
+${JSON.stringify(aiServicesContext, null, 2)}
+\`\`\`
+
+## INSTRUCTION:
+Call assess_compliance NOW with these EXACT parameters:
+- organizationContext: Pass the COMPLETE organization context JSON shown above (not a summary)
+- aiServicesContext: Pass the COMPLETE AI services context JSON shown above (not a summary)
 - generateDocumentation: true
 
+DO NOT simplify or summarize the context. Pass the FULL JSON objects exactly as provided above.
 After assess_compliance returns, provide a human-readable summary of the compliance assessment.`;
       
       const followUpMessages = [
         ...messages,
         {
           role: "assistant",
-          content: `I have gathered the organization profile and discovered ${aiServicesContext?.systems?.length || 0} AI systems. Now I will call assess_compliance to generate the full compliance report.`,
+          content: `I have gathered the organization profile for ${orgContext?.organization?.name || "the organization"} and discovered ${aiServicesContext?.systems?.length || 0} AI systems. Now I will call assess_compliance with the complete context to generate the full compliance report.`,
         },
         {
           role: "user", 
-          content: contextSummary,
+          content: fullContextMessage,
         },
       ];
       
-      console.log("Making follow-up request to call assess_compliance...");
+      console.log("Making follow-up request to call assess_compliance with FULL context...");
+      console.log(`Organization context size: ${JSON.stringify(orgContext || {}).length} chars`);
+      console.log(`AI services context size: ${JSON.stringify(aiServicesContext || {}).length} chars`);
       
       const followUpResult = await agent.streamText({ messages: followUpMessages });
       const followUpData = await processStreamEvents(followUpResult.fullStream, res);
@@ -217,9 +230,9 @@ After assess_compliance returns, provide a human-readable summary of the complia
     // Final check for text
     const hasTextNow = hasText;
     
-    // If still no text response, generate a fallback based on available tool results
+    // If still no text response, generate a comprehensive summary based on available tool results
     if (!hasTextNow && toolResults.size > 0) {
-      console.log("Generating fallback summary from tool results...");
+      console.log("Generating comprehensive compliance report from tool results...");
       
       // Create a summary from available data
       const orgData = toolResults.get("discover_organization");
@@ -228,54 +241,297 @@ After assess_compliance returns, provide a human-readable summary of the complia
       
       let summary = "\n\n---\n\n";
       
+      // ================== HEADER ==================
+      const orgName = orgData?.organization?.name || "Organization";
+      summary += `# 🇪🇺 EU AI Act Compliance Report\n`;
+      summary += `## ${orgName}\n\n`;
+      summary += `*Assessment Date: ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}*\n\n`;
+      summary += `---\n\n`;
+      
+      // ================== ORGANIZATION PROFILE ==================
       if (orgData?.organization) {
-        summary += `## 📊 EU AI Act Compliance Report for ${orgData.organization.name}\n\n`;
-        summary += `### Organization Profile\n`;
-        summary += `- **Sector:** ${orgData.organization.sector}\n`;
-        summary += `- **Size:** ${orgData.organization.size}\n`;
-        summary += `- **EU Presence:** ${orgData.organization.euPresence ? "Yes" : "No"}\n`;
-        summary += `- **AI Maturity:** ${orgData.organization.aiMaturityLevel}\n\n`;
-      }
-      
-      if (aiData?.systems) {
-        summary += `### AI Systems Analyzed\n`;
-        for (const sys of aiData.systems) {
-          summary += `- **${sys.system.name}**\n`;
-          summary += `  - Risk Category: ${sys.riskClassification.category}\n`;
-          summary += `  - Risk Score: ${sys.riskClassification.riskScore}/100\n`;
-          summary += `  - Conformity Assessment: ${sys.complianceStatus.conformityAssessmentStatus}\n`;
+        const org = orgData.organization;
+        summary += `## 🏢 Organization Profile\n\n`;
+        summary += `| Attribute | Value |\n`;
+        summary += `|-----------|-------|\n`;
+        summary += `| **Name** | ${org.name} |\n`;
+        summary += `| **Sector** | ${org.sector} |\n`;
+        summary += `| **Size** | ${org.size} |\n`;
+        summary += `| **Headquarters** | ${org.headquarters?.city || "Unknown"}, ${org.headquarters?.country || "Unknown"} |\n`;
+        summary += `| **EU Presence** | ${org.euPresence ? "✅ Yes" : "❌ No"} |\n`;
+        summary += `| **AI Maturity Level** | ${org.aiMaturityLevel} |\n`;
+        summary += `| **Primary Role** | ${org.primaryRole} (per Article 3) |\n`;
+        summary += `| **Jurisdictions** | ${org.jurisdiction?.join(", ") || "Unknown"} |\n`;
+        if (org.contact?.website) {
+          summary += `| **Website** | ${org.contact.website} |\n`;
         }
-        summary += "\n";
+        summary += `\n`;
         
-        summary += `### Risk Summary\n`;
-        summary += `- High-Risk Systems: ${aiData.riskSummary.highRiskCount}\n`;
-        summary += `- Limited-Risk Systems: ${aiData.riskSummary.limitedRiskCount}\n`;
-        summary += `- Minimal-Risk Systems: ${aiData.riskSummary.minimalRiskCount}\n\n`;
-      }
-      
-      if (assessData?.assessment) {
-        summary += `### Compliance Assessment\n`;
-        summary += `- **Overall Score:** ${assessData.assessment.overallScore}/100\n`;
-        summary += `- **Risk Level:** ${assessData.assessment.riskLevel}\n\n`;
-        
-        if (assessData.assessment.gaps?.length > 0) {
-          summary += `### Key Gaps\n`;
-          for (const gap of assessData.assessment.gaps.slice(0, 5)) {
-            summary += `- ${gap.description}\n`;
+        // Regulatory Context
+        if (orgData.regulatoryContext) {
+          const reg = orgData.regulatoryContext;
+          summary += `### 📋 Regulatory Context\n\n`;
+          summary += `- **Quality Management System (Article 17):** ${reg.hasQualityManagementSystem ? "✅ Implemented" : "⚠️ Not Implemented"}\n`;
+          summary += `- **Risk Management System (Article 9):** ${reg.hasRiskManagementSystem ? "✅ Implemented" : "⚠️ Not Implemented"}\n`;
+          if (reg.existingCertifications?.length > 0) {
+            summary += `- **Certifications:** ${reg.existingCertifications.join(", ")}\n`;
           }
-          summary += "\n";
+          if (!org.euPresence) {
+            summary += `- **Authorized Representative (Article 22):** ${reg.hasAuthorizedRepresentative ? "✅ Appointed" : "⚠️ Required for non-EU entities"}\n`;
+          }
+          summary += `\n`;
         }
       }
       
-      // Add compliance deadlines
-      if (aiData?.complianceDeadlines) {
-        summary += `### Key Compliance Deadlines\n`;
-        summary += `- **High-Risk Systems:** ${aiData.complianceDeadlines.highRisk}\n`;
-        summary += `- **Limited-Risk Systems:** ${aiData.complianceDeadlines.limitedRisk}\n`;
-        summary += `- **GPAI Models:** ${aiData.complianceDeadlines.generalGPAI}\n\n`;
+      // ================== AI SYSTEMS ANALYSIS ==================
+      if (aiData?.systems && aiData.systems.length > 0) {
+        summary += `## 🤖 AI Systems Analysis\n\n`;
+        
+        // Risk Summary Table
+        const riskSummary = aiData.riskSummary;
+        summary += `### Risk Distribution\n\n`;
+        summary += `| Risk Category | Count | Status |\n`;
+        summary += `|---------------|-------|--------|\n`;
+        if (riskSummary.unacceptableRiskCount > 0) {
+          summary += `| 🔴 **Unacceptable Risk** | ${riskSummary.unacceptableRiskCount} | ⛔ PROHIBITED |\n`;
+        }
+        summary += `| 🟠 **High Risk** | ${riskSummary.highRiskCount} | Requires Conformity Assessment |\n`;
+        summary += `| 🟡 **Limited Risk** | ${riskSummary.limitedRiskCount} | Transparency Obligations |\n`;
+        summary += `| 🟢 **Minimal Risk** | ${riskSummary.minimalRiskCount} | No Specific Obligations |\n`;
+        summary += `| **Total** | ${riskSummary.totalCount} | |\n\n`;
+        
+        // Detailed System Analysis
+        summary += `### Detailed System Analysis\n\n`;
+        
+        for (const sys of aiData.systems) {
+          const riskEmoji = sys.riskClassification.category === "High" ? "🟠" : 
+                           sys.riskClassification.category === "Limited" ? "🟡" : 
+                           sys.riskClassification.category === "Unacceptable" ? "🔴" : "🟢";
+          
+          summary += `#### ${riskEmoji} ${sys.system.name}\n\n`;
+          summary += `**Risk Classification:** ${sys.riskClassification.category} Risk (Score: ${sys.riskClassification.riskScore}/100)\n\n`;
+          
+          // Purpose and Description
+          summary += `**Intended Purpose:** ${sys.system.intendedPurpose}\n\n`;
+          
+          // Classification Reasoning
+          if (sys.riskClassification.justification) {
+            summary += `**Classification Reasoning:**\n> ${sys.riskClassification.justification}\n\n`;
+          }
+          
+          // Annex III Category for High-Risk
+          if (sys.riskClassification.category === "High" && sys.riskClassification.annexIIICategory) {
+            summary += `**Annex III Category:** ${sys.riskClassification.annexIIICategory}\n\n`;
+        }
+          
+          // Technical Details
+          summary += `**Technical Details:**\n`;
+          summary += `- AI Technology: ${sys.technicalDetails.aiTechnology?.join(", ") || "Not specified"}\n`;
+          summary += `- Data Processed: ${sys.technicalDetails.dataProcessed?.join(", ") || "Not specified"}\n`;
+          summary += `- Deployment: ${sys.technicalDetails.deploymentModel || "Not specified"}\n`;
+          summary += `- Human Oversight: ${sys.technicalDetails.humanOversight?.enabled ? "✅ Enabled" : "⚠️ Not enabled"}\n`;
+          if (sys.technicalDetails.humanOversight?.description) {
+            summary += `  - *${sys.technicalDetails.humanOversight.description}*\n`;
+          }
+          summary += `\n`;
+          
+          // Compliance Status
+          summary += `**Compliance Status:**\n`;
+          summary += `- Conformity Assessment: ${sys.complianceStatus.conformityAssessmentStatus}\n`;
+          summary += `- Technical Documentation: ${sys.complianceStatus.hasTechnicalDocumentation ? "✅" : "❌"}\n`;
+          summary += `- EU Database Registration: ${sys.complianceStatus.registeredInEUDatabase ? "✅" : "❌"}\n`;
+          summary += `- Post-Market Monitoring: ${sys.complianceStatus.hasPostMarketMonitoring ? "✅" : "❌"}\n`;
+          if (sys.complianceStatus.complianceDeadline) {
+            summary += `- **Deadline:** ${sys.complianceStatus.complianceDeadline}\n`;
+          }
+          if (sys.complianceStatus.estimatedComplianceEffort) {
+            summary += `- **Estimated Effort:** ${sys.complianceStatus.estimatedComplianceEffort}\n`;
+          }
+          summary += `\n`;
+          
+          // Regulatory References
+          if (sys.riskClassification.regulatoryReferences?.length > 0) {
+            summary += `**Applicable Articles:** ${sys.riskClassification.regulatoryReferences.join(", ")}\n\n`;
       }
       
-      // Stream the fallback summary
+          summary += `---\n\n`;
+        }
+      }
+      
+      // ================== COMPLIANCE ASSESSMENT ==================
+      if (assessData?.assessment) {
+        const assess = assessData.assessment;
+        
+        summary += `## 📊 Compliance Assessment Results\n\n`;
+        
+        // Score Card
+        const scoreEmoji = assess.overallScore >= 80 ? "🟢" : assess.overallScore >= 60 ? "🟡" : assess.overallScore >= 40 ? "🟠" : "🔴";
+        summary += `### Overall Score: ${scoreEmoji} ${assess.overallScore}/100\n`;
+        summary += `**Risk Level:** ${assess.riskLevel}\n\n`;
+        
+        // Compliance by Article
+        if (assess.complianceByArticle && Object.keys(assess.complianceByArticle).length > 0) {
+          summary += `### Compliance by EU AI Act Article\n\n`;
+          summary += `| Article | Status | Issues |\n`;
+          summary += `|---------|--------|--------|\n`;
+          for (const [article, status] of Object.entries(assess.complianceByArticle)) {
+            const icon = status.compliant ? "✅" : "❌";
+            const issues = status.gaps?.length > 0 ? status.gaps.length + " gap(s)" : "None";
+            summary += `| ${article} | ${icon} | ${issues} |\n`;
+          }
+          summary += `\n`;
+        }
+        
+        // Gap Analysis
+        if (assess.gaps && assess.gaps.length > 0) {
+          summary += `### 🔍 Gap Analysis\n\n`;
+          
+          // Group by severity
+          const critical = assess.gaps.filter((g: any) => g.severity === "CRITICAL");
+          const high = assess.gaps.filter((g: any) => g.severity === "HIGH");
+          const medium = assess.gaps.filter((g: any) => g.severity === "MEDIUM");
+          const low = assess.gaps.filter((g: any) => g.severity === "LOW");
+          
+          if (critical.length > 0) {
+            summary += `#### 🔴 Critical Gaps (${critical.length})\n\n`;
+            for (const gap of critical) {
+              summary += `**${gap.category}** - ${gap.articleReference || "General"}\n`;
+              summary += `> ${gap.description}\n`;
+              if (gap.currentState) summary += `> *Current:* ${gap.currentState}\n`;
+              if (gap.requiredState) summary += `> *Required:* ${gap.requiredState}\n`;
+              if (gap.deadline) summary += `> ⏰ Deadline: ${gap.deadline}\n`;
+              summary += `\n`;
+            }
+          }
+          
+          if (high.length > 0) {
+            summary += `#### 🟠 High Priority Gaps (${high.length})\n\n`;
+            for (const gap of high) {
+              summary += `**${gap.category}** - ${gap.articleReference || "General"}\n`;
+              summary += `> ${gap.description}\n`;
+              if (gap.deadline) summary += `> ⏰ Deadline: ${gap.deadline}\n`;
+              summary += `\n`;
+            }
+          }
+          
+          if (medium.length > 0) {
+            summary += `#### 🟡 Medium Priority Gaps (${medium.length})\n\n`;
+            for (const gap of medium.slice(0, 5)) {
+              summary += `- **${gap.category}:** ${gap.description}\n`;
+          }
+            if (medium.length > 5) {
+              summary += `- *...and ${medium.length - 5} more medium-priority gaps*\n`;
+            }
+            summary += `\n`;
+          }
+          
+          if (low.length > 0) {
+            summary += `#### 🟢 Low Priority Gaps (${low.length})\n\n`;
+            summary += `*${low.length} low-priority gaps identified - see detailed report*\n\n`;
+        }
+      }
+      
+        // Recommendations
+        if (assess.recommendations && assess.recommendations.length > 0) {
+          summary += `### 💡 Priority Recommendations\n\n`;
+          
+          // Sort by priority
+          const sortedRecs = [...assess.recommendations].sort((a: any, b: any) => a.priority - b.priority);
+          
+          for (const rec of sortedRecs.slice(0, 5)) {
+            summary += `#### ${rec.priority}. ${rec.title}\n`;
+            summary += `*${rec.articleReference || "General Compliance"}*\n\n`;
+            summary += `${rec.description}\n\n`;
+            
+            if (rec.implementationSteps && rec.implementationSteps.length > 0) {
+              summary += `**Implementation Steps:**\n`;
+              for (let i = 0; i < Math.min(rec.implementationSteps.length, 5); i++) {
+                summary += `${i + 1}. ${rec.implementationSteps[i]}\n`;
+              }
+              summary += `\n`;
+            }
+            
+            if (rec.estimatedEffort) {
+              summary += `**Estimated Effort:** ${rec.estimatedEffort}\n`;
+            }
+            if (rec.expectedOutcome) {
+              summary += `**Expected Outcome:** ${rec.expectedOutcome}\n`;
+            }
+            summary += `\n`;
+          }
+          
+          if (sortedRecs.length > 5) {
+            summary += `*...and ${sortedRecs.length - 5} additional recommendations*\n\n`;
+          }
+        }
+      }
+      
+      // ================== KEY COMPLIANCE DEADLINES ==================
+      if (aiData?.complianceDeadlines) {
+        summary += `## 📅 Key Compliance Deadlines\n\n`;
+        summary += `| Deadline | Requirement |\n`;
+        summary += `|----------|-------------|\n`;
+        summary += `| **February 2, 2025** | Prohibited AI practices ban (Article 5) |\n`;
+        summary += `| **August 2, 2025** | GPAI model obligations (Article 53) |\n`;
+        summary += `| **${aiData.complianceDeadlines.limitedRisk}** | Limited-risk transparency (Article 50) |\n`;
+        summary += `| **${aiData.complianceDeadlines.highRisk}** | High-risk AI full compliance |\n`;
+        summary += `\n`;
+      }
+      
+      // ================== DOCUMENTATION TEMPLATES ==================
+      if (assessData?.documentation) {
+        const docs = assessData.documentation;
+        summary += `## 📝 Generated Documentation Templates\n\n`;
+        summary += `The following EU AI Act compliance documentation templates have been generated:\n\n`;
+        
+        const docList = [
+          { name: "Risk Management System", field: "riskManagementTemplate", article: "Article 9" },
+          { name: "Technical Documentation", field: "technicalDocumentation", article: "Article 11, Annex IV" },
+          { name: "Conformity Assessment", field: "conformityAssessment", article: "Article 43" },
+          { name: "Transparency Notice", field: "transparencyNotice", article: "Article 50" },
+          { name: "Quality Management System", field: "qualityManagementSystem", article: "Article 17" },
+          { name: "Human Oversight Procedure", field: "humanOversightProcedure", article: "Article 14" },
+          { name: "Data Governance Policy", field: "dataGovernancePolicy", article: "Article 10" },
+          { name: "Incident Reporting Procedure", field: "incidentReportingProcedure", article: "General" },
+        ];
+        
+        summary += `| Document | Article Reference | Status |\n`;
+        summary += `|----------|-------------------|--------|\n`;
+        for (const doc of docList) {
+          const hasDoc = (docs as any)[doc.field];
+          summary += `| ${doc.name} | ${doc.article} | ${hasDoc ? "✅ Generated" : "⚪ Not generated"} |\n`;
+        }
+        summary += `\n`;
+        
+        // Show first template as example
+        const firstTemplate = docs.riskManagementTemplate || docs.technicalDocumentation || docs.transparencyNotice;
+        if (firstTemplate) {
+          summary += `### 📄 Sample Template: Risk Management System (Article 9)\n\n`;
+          summary += `<details>\n<summary>Click to expand template</summary>\n\n`;
+          summary += `${firstTemplate.substring(0, 2000)}${firstTemplate.length > 2000 ? "\n\n*...template truncated for display...*" : ""}\n`;
+          summary += `\n</details>\n\n`;
+        }
+      }
+      
+      // ================== AI REASONING ==================
+      if (assessData?.reasoning) {
+        summary += `## 🧠 Assessment Reasoning\n\n`;
+        summary += `<details>\n<summary>Click to expand AI analysis reasoning</summary>\n\n`;
+        summary += `${assessData.reasoning}\n`;
+        summary += `\n</details>\n\n`;
+      }
+      
+      // ================== FOOTER ==================
+      summary += `---\n\n`;
+      summary += `### ℹ️ About This Report\n\n`;
+      summary += `This compliance report was generated using:\n`;
+      summary += `- **Organization Discovery:** Tavily AI-powered research\n`;
+      summary += `- **AI Systems Discovery:** Automated system classification per Annex III\n`;
+      summary += `- **Compliance Assessment:** xAI Grok-4 analysis against EU AI Act requirements\n\n`;
+      summary += `*Report generated on ${new Date().toISOString()}*\n\n`;
+      summary += `**Disclaimer:** This report is for informational purposes only and does not constitute legal advice. Consult with qualified legal professionals for official compliance guidance.\n`;
+      
+      // Stream the comprehensive summary
       for (const char of summary) {
         res.write(`data: ${JSON.stringify({ type: "text", content: char })}\n\n`);
       }

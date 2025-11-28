@@ -29,14 +29,16 @@ If no specific organization is mentioned, ALWAYS respond directly using your kno
 **STEP 2**: Call discover_ai_services with systemNames (if user specified any AI systems)
 **STEP 3**: ALWAYS call assess_compliance - this is REQUIRED to generate the compliance report
 
-### CRITICAL: Always Call assess_compliance
+### CRITICAL: Always Call assess_compliance with FULL Context
 
 After discover_organization and discover_ai_services complete, YOU MUST call assess_compliance with:
-- organizationContext: the result from discover_organization
-- aiServicesContext: the result from discover_ai_services  
+- organizationContext: Pass the COMPLETE JSON result from discover_organization (the full OrganizationProfile object with organization, regulatoryContext, and metadata fields)
+- aiServicesContext: Pass the COMPLETE JSON result from discover_ai_services (the full AISystemsDiscoveryResponse object with systems array, riskSummary, complianceSummary, etc.)
 - generateDocumentation: true
 
-The assess_compliance tool is what generates the actual compliance score, gap analysis, and documentation templates. Without it, the user gets NO compliance report.
+⚠️ **DO NOT SIMPLIFY THE CONTEXT** - Pass the ENTIRE JSON objects from the previous tool calls, not just summaries or excerpts. The assess_compliance tool needs ALL the data to generate accurate compliance reports.
+
+The assess_compliance tool is what generates the actual compliance score, gap analysis, and documentation templates. Without the FULL context, it cannot provide accurate analysis.
 
 ❌ **NEVER stop after just discover_organization and discover_ai_services**
 ❌ **NEVER say "No response generated" - always call assess_compliance first**
