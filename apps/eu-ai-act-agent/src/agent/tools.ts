@@ -72,16 +72,16 @@ This tool scans for AI systems and provides comprehensive compliance analysis:
 Generates reports for systems requiring immediate attention with EU database registration obligations (Article 49, Annex VIII).`,
 
   parameters: z.object({
-    organizationContext: z.any().optional().describe("Organization profile from discover_organization tool (optional but recommended)"),
+    organizationName: z.string().optional().describe("Organization name to discover AI services for (optional but recommended)"),
     systemNames: z.array(z.string()).optional().describe("Specific AI system names to discover (optional, scans all if not provided)"),
     scope: z.string().optional().describe("Scope of discovery: 'all' (default), 'high-risk-only', 'production-only'"),
     context: z.string().optional().describe("Additional context about the systems (optional)"),
   }),
 
-  execute: async ({ organizationContext, systemNames, scope, context }) => {
+  execute: async ({ organizationName, systemNames, scope, context }) => {
     try {
       const result = await discoverAIServices({
-        organizationContext,
+        organizationContext: organizationName ? { name: organizationName } : undefined,
         systemNames,
         scope,
         context,
@@ -122,17 +122,17 @@ Uses GPT-4 to analyze compliance status and generate professional documentation 
 Requires OPENAI_API_KEY environment variable to be set.`,
 
   parameters: z.object({
-    organizationContext: z.any().optional().describe("Organization profile from discover_organization tool (optional)"),
-    aiServicesContext: z.any().optional().describe("AI services discovery results from discover_ai_services tool (optional)"),
+    organizationName: z.string().optional().describe("Organization name to assess compliance for (optional)"),
+    systemNames: z.array(z.string()).optional().describe("AI system names to assess (optional)"),
     focusAreas: z.array(z.string()).optional().describe("Specific compliance areas to focus on (optional)"),
     generateDocumentation: z.boolean().optional().describe("Whether to generate documentation templates (default: true)"),
   }),
 
-  execute: async ({ organizationContext, aiServicesContext, focusAreas, generateDocumentation }) => {
+  execute: async ({ organizationName, systemNames, focusAreas, generateDocumentation }) => {
     try {
       const result = await assessCompliance({
-        organizationContext,
-        aiServicesContext,
+        organizationContext: organizationName ? { name: organizationName } : undefined,
+        aiServicesContext: systemNames ? { systems: systemNames } : undefined,
         focusAreas,
         generateDocumentation,
       });

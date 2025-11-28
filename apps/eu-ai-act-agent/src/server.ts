@@ -12,10 +12,10 @@ import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { createAgent } from "./agent/index.js";
 
-// Load environment variables
+// Load environment variables from project root
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-config({ path: resolve(__dirname, "../../.env") });
+config({ path: resolve(__dirname, "../../../.env") });  // Go up from src -> eu-ai-act-agent -> apps -> root
 
 const app = express();
 const PORT = process.env.PORT || 3001;

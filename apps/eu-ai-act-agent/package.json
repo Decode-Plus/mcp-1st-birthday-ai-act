@@ -14,9 +14,9 @@
     "gradio": "uv run src/gradio_app.py"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^1.0.0",
+    "@ai-sdk/openai": "^2.0.74",
     "@modelcontextprotocol/sdk": "^1.23.0",
-    "ai": "^5.0.0",
+    "ai": "^5.0.104",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",

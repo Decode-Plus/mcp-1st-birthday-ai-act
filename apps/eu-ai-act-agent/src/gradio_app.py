@@ -8,11 +8,13 @@ import gradio as gr
 import requests
 import json
 import os
+from pathlib import Path
 from typing import List, Tuple
 from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Load environment variables from root .env file
+ROOT_DIR = Path(__file__).parent.parent.parent.parent  # Go up from src -> eu-ai-act-agent -> apps -> root
+load_dotenv(ROOT_DIR / ".env")
 
 # API Configuration
 API_URL = os.getenv("API_URL", "http://localhost:3001")
@@ -139,7 +141,6 @@ with gr.Blocks(
                 label="Chat with EU AI Act Expert",
                 height=500,
                 show_label=True,
-                type="messages",  # Gradio 6 messages format
             )
             
             with gr.Row():
