@@ -43,14 +43,15 @@ AVAILABLE_MODELS = {
 }
 
 # Current model settings (can be updated via UI)
-# SECURITY: Never expose backend API keys - only store user-provided keys for this session
+# SECURITY: Store user-provided keys for this session only
+# NOTE: API keys are REQUIRED - no backend keys are provided
 current_model_settings = {
     "model": os.getenv("AI_MODEL", "claude-4.5"),  # Default to Anthropic (hackathon host!)
-    # User-provided keys only (NOT from env - backend has its own keys)
+    # User-provided keys (REQUIRED - no backend fallback)
     "openai_api_key": "",
     "xai_api_key": "",
     "anthropic_api_key": "",
-    "tavily_api_key": ""  # For web research
+    "tavily_api_key": ""  # Required for web research & organization discovery
 }
 
 # Thread-safe cancellation flag for stopping ongoing requests
@@ -403,18 +404,17 @@ def format_thinking_indicator(tool_name: str = None) -> str:
 def get_api_headers() -> dict:
     """Get headers with model configuration for API requests
     
-    SECURITY: Only pass model selection. API keys are managed by the backend.
-    User-provided keys (if any) are only passed when explicitly set in this session.
-    Backend uses its own environment keys as primary - we don't expose them here.
+    SECURITY: Only pass model selection and user-provided API keys.
+    API keys are REQUIRED - no backend keys are provided.
+    User must provide their own keys via the Model Settings UI.
     """
     headers = {"Content-Type": "application/json"}
     
-    # Pass model selection only
+    # Pass model selection
     if current_model_settings["model"]:
         headers["X-AI-Model"] = current_model_settings["model"]
     
-    # Only pass user-provided keys (for users who want to use their own keys)
-    # Backend will fall back to its own env keys if these are not provided
+    # Pass user-provided API keys (REQUIRED - no backend fallback)
     model = current_model_settings["model"]
     if model == "gpt-5" and current_model_settings["openai_api_key"]:
         headers["X-OpenAI-API-Key"] = current_model_settings["openai_api_key"]
@@ -423,7 +423,7 @@ def get_api_headers() -> dict:
     elif model == "claude-4.5" and current_model_settings["anthropic_api_key"]:
         headers["X-Anthropic-API-Key"] = current_model_settings["anthropic_api_key"]
     
-    # Tavily API key for web research (optional - backend has its own)
+    # Tavily API key for web research (REQUIRED for organization discovery)
     if current_model_settings["tavily_api_key"]:
         headers["X-Tavily-API-Key"] = current_model_settings["tavily_api_key"]
     
@@ -1014,40 +1014,40 @@ with gr.Blocks(
                 info="Select the AI model to use"
             )
             
-            # API Key inputs (password fields) - OPTIONAL: Backend has its own keys
-            with gr.Accordion("🔑 API Keys (Optional)", open=False):
-                gr.Markdown("*Backend uses configured keys by default. Only provide your own keys if you want to override.*")
+            # API Key inputs (password fields) - REQUIRED: No backend keys provided
+            with gr.Accordion("🔑 API Keys (Required)", open=True):
+                gr.Markdown("⚠️ **API keys are required to use this service.** Please provide your own API keys below.")
                 
                 gr.Markdown("#### 🔍 Research API")
                 tavily_key = gr.Textbox(
-                    label="Tavily API Key",
-                    placeholder="tvly-... (leave empty to use backend key)",
+                    label="Tavily API Key *",
+                    placeholder="tvly-... (required for web research)",
                     type="password",
                     value="",  # Never show existing keys
-                    info="Optional - for web research & organization discovery"
+                    info="Required - for web research & organization discovery"
                 )
                 
                 gr.Markdown("#### 🤖 AI Model APIs")
                 anthropic_key = gr.Textbox(
-                    label="Anthropic API Key",
-                    placeholder="sk-ant-... (leave empty to use backend key)",
+                    label="Anthropic API Key *",
+                    placeholder="sk-ant-... (required for Claude 4.5)",
                     type="password",
                     value="",  # Never show existing keys
-                    info="Optional - for Claude 4.5 (default model)"
+                    info="Required - for Claude 4.5 (default model)"
                 )
                 openai_key = gr.Textbox(
                     label="OpenAI API Key",
-                    placeholder="sk-... (leave empty to use backend key)",
+                    placeholder="sk-... (required for GPT-5)",
                     type="password",
                     value="",  # Never show existing keys
-                    info="Optional - for GPT-5"
+                    info="Required if using GPT-5 model"
                 )
                 xai_key = gr.Textbox(
                     label="xAI API Key",
-                    placeholder="xai-... (leave empty to use backend key)",
+                    placeholder="xai-... (required for Grok 4.1)",
                     type="password",
                     value="",  # Never show existing keys
-                    info="Optional - for Grok 4.1"
+                    info="Required if using Grok 4.1 model"
                 )
                 save_keys_btn = gr.Button("💾 Save Keys", variant="secondary", size="sm")
                 keys_status = gr.Markdown("")
@@ -1141,14 +1141,17 @@ with gr.Blocks(
         
         SECURITY: These are stored in memory only for this session.
         They are NOT persisted and NOT sent to backend unless user provides them.
-        Backend uses its own configured keys by default.
+        API keys are REQUIRED - no backend keys are provided.
         """
         saved = []
+        missing = []
         
         # Only update if a real key is provided
         if tavily_val and len(tavily_val) > 10:
             current_model_settings["tavily_api_key"] = tavily_val
             saved.append("Tavily")
+        else:
+            missing.append("Tavily")
         
         if anthropic_val and len(anthropic_val) > 10:
             current_model_settings["anthropic_api_key"] = anthropic_val
@@ -1162,9 +1165,32 @@ with gr.Blocks(
             current_model_settings["xai_api_key"] = xai_val
             saved.append("xAI")
         
+        # Build status message
+        status_parts = []
         if saved:
-            return f"✅ Keys saved for this session: {', '.join(saved)}"
-        return "ℹ️ No keys provided (backend will use its configured keys)"
+            status_parts.append(f"✅ Keys saved: {', '.join(saved)}")
+        
+        # Check for missing required keys based on selected model
+        model = current_model_settings["model"]
+        model_key_missing = False
+        if model == "claude-4.5" and not current_model_settings["anthropic_api_key"]:
+            model_key_missing = True
+            status_parts.append("⚠️ **Anthropic API key required** for Claude 4.5")
+        elif model == "gpt-5" and not current_model_settings["openai_api_key"]:
+            model_key_missing = True
+            status_parts.append("⚠️ **OpenAI API key required** for GPT-5")
+        elif model == "grok-4-1" and not current_model_settings["xai_api_key"]:
+            model_key_missing = True
+            status_parts.append("⚠️ **xAI API key required** for Grok 4.1")
+        
+        # Tavily is always required for research tools
+        if "Tavily" in missing:
+            status_parts.append("⚠️ **Tavily API key required** for web research")
+        
+        if not status_parts:
+            return "✅ All required keys configured!"
+        
+        return "\n\n".join(status_parts)
     
     def get_current_model_status():
         """Get current model and key status"""
@@ -1182,6 +1208,55 @@ with gr.Blocks(
         
         return f"**Model:** {model_info.get('name', model)}\n**Key Status:** {key_status}"
     
+    def check_required_keys():
+        """Check if required API keys are configured
+        
+        Returns a tuple of (is_valid, error_message)
+        - is_valid: True if all required keys are present
+        - error_message: Description of missing keys if not valid
+        """
+        missing_keys = []
+        
+        # Check model API key based on selected model
+        model = current_model_settings["model"]
+        if model == "claude-4.5" and not current_model_settings["anthropic_api_key"]:
+            missing_keys.append("**Anthropic API Key** (required for Claude 4.5)")
+        elif model == "gpt-5" and not current_model_settings["openai_api_key"]:
+            missing_keys.append("**OpenAI API Key** (required for GPT-5)")
+        elif model == "grok-4-1" and not current_model_settings["xai_api_key"]:
+            missing_keys.append("**xAI API Key** (required for Grok 4.1)")
+        
+        # Tavily is required for web research and organization discovery
+        if not current_model_settings["tavily_api_key"]:
+            missing_keys.append("**Tavily API Key** (required for web research & organization discovery)")
+        
+        if missing_keys:
+            error_msg = """## ⚠️ API Keys Required
+
+To use this service, you need to provide your own API keys. The following keys are missing:
+
+"""
+            for key in missing_keys:
+                error_msg += f"- {key}\n"
+            
+            error_msg += """
+### How to add your API keys:
+
+1. Expand the **🔑 API Keys (Required)** section in the sidebar
+2. Enter your API keys in the corresponding fields
+3. Click **💾 Save Keys**
+
+### Where to get API keys:
+
+- **Tavily**: [tavily.com](https://tavily.com) - Sign up for free tier
+- **Anthropic**: [console.anthropic.com](https://console.anthropic.com) - Get Claude API key
+- **OpenAI**: [platform.openai.com](https://platform.openai.com) - Get GPT API key
+- **xAI**: [console.x.ai](https://console.x.ai) - Get Grok API key
+"""
+            return False, error_msg
+        
+        return True, ""
+    
     # Event handlers - clear input immediately and stream response together
     def respond_and_clear(message: str, history: list):
         """Wrapper that yields (cleared_input, chat_history, stop_visible) tuples"""
@@ -1189,6 +1264,17 @@ with gr.Blocks(
         
         if not message.strip():
             yield "", history, gr.update(visible=False)
+            return
+        
+        # Check for required API keys before proceeding
+        keys_valid, error_message = check_required_keys()
+        if not keys_valid:
+            # Show user message and error about missing keys
+            error_history = list(history) + [
+                ChatMessage(role="user", content=message),
+                ChatMessage(role="assistant", content=error_message)
+            ]
+            yield "", error_history, gr.update(visible=False)
             return
         
         # Reset cancellation token for new request

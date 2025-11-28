@@ -30,6 +30,7 @@ cd "$TEMP_DIR"
 
 # Move Space files to root (from apps/eu-ai-act-agent)
 cp apps/eu-ai-act-agent/Dockerfile ./
+cp apps/eu-ai-act-agent/README.md ./
 
 # Remove git and push to HF
 rm -rf .git

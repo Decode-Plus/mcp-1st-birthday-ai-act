@@ -1,6 +1,6 @@
 ---
 title: EU AI Act Compliance Agent
-emoji: 🇪🇺
+emoji: ⚖️
 colorFrom: blue
 colorTo: indigo
 sdk: docker
