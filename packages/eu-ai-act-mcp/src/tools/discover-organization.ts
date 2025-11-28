@@ -9,55 +9,8 @@ import type {
   OrganizationProfile,
   DiscoverOrganizationInput,
 } from "../types/index.js";
-
-/**
- * Extract domain from URL
- */
-function extractDomainFromUrl(url: string): string | undefined {
-  try {
-    const urlObj = new URL(url);
-    return urlObj.hostname;
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * Find company domain from search results
- */
-function findCompanyDomain(searchResults: any, companyName: string): string | undefined {
-  const results = searchResults.results || [];
-  
-  // Look for official company website in results
-  for (const result of results) {
-    const url = result.url?.toLowerCase() || "";
-    const title = result.title?.toLowerCase() || "";
-    
-    // Check if this looks like an official company website
-    if (title.includes("official") || title.includes("about") || url.includes("/about")) {
-      const domain = extractDomainFromUrl(result.url);
-      if (domain && !domain.includes("linkedin") && !domain.includes("wiki") && !domain.includes("news")) {
-        console.error(`🌐 Found official company domain: ${domain}`);
-        return domain;
-      }
-    }
-  }
-  
-  // If no official website found, try to find main company domain
-  for (const result of results) {
-    const url = result.url?.toLowerCase() || "";
-    const domain = extractDomainFromUrl(result.url);
-    
-    // Skip knowledge bases, wikis, news sites
-    if (domain && !domain.includes("linkedin") && !domain.includes("wiki") && !domain.includes("news") && 
-        !domain.includes("ebsco") && !domain.includes("globaldata")) {
-      console.error(`🌐 Found company domain from search: ${domain}`);
-      return domain;
-    }
-  }
-  
-  return undefined;
-}
+import { getBrandingInfo } from "../utils/branding.js";
+import { findCompanyDomain } from "../utils/domain.js";
 
 /**
  * Extract comprehensive organization data from Tavily search results
@@ -346,8 +299,9 @@ async function researchOrganization(
   try {
     const client = tavily({ apiKey });
     
-    // Comprehensive single search query to get all needed information
-    const comprehensiveQuery = `${name} company overview headquarters location contact information registration number VAT business model products services AI artificial intelligence machine learning technology GDPR compliance certifications ISO 27001 ISO 9001 quality management system risk management system authorized representative EU regulations${context ? ` ${context}` : ""}`;
+    // Optimized search query (max 400 chars for Tavily)
+    // Focus on key identifiers that yield rich company information
+    const comprehensiveQuery = `${name} company headquarters location sector size AI products services certifications${context ? ` ${context}` : ""}`.slice(0, 400);
     
     console.error("\n🔍 Starting Tavily Comprehensive Search:");
     console.error(`Organization: ${name}`);
@@ -378,6 +332,11 @@ async function researchOrganization(
     // Extract all comprehensive data from single search
     const extractedData = extractComprehensiveData(name, discoveredDomain, searchResults);
     
+    // Extract branding information (logo and colors)
+    console.error("\n🎨 Extracting branding information...");
+    const branding = await getBrandingInfo(name, discoveredDomain, searchResults);
+    console.error(`✅ Branding extraction complete: ${branding?.source || "none"}`);
+    
     const completenessScore = calculateCompletenessScore(searchResults);
     
     return {
@@ -394,6 +353,7 @@ async function researchOrganization(
           phone: extractedData.organization?.contact?.phone,
           website: extractedData.organization?.contact?.website,
         },
+        branding,
         aiMaturityLevel: extractedData.organization?.aiMaturityLevel || "Developing",
         aiSystemsCount: extractedData.organization?.aiSystemsCount || 0,
         primaryRole: extractedData.organization?.primaryRole || "Provider",
@@ -544,6 +504,7 @@ function enrichWithAIActContext(
       contact: profile.organization?.contact || {
         email: "unknown@example.com",
       },
+      branding: profile.organization?.branding,
       aiMaturityLevel: profile.organization?.aiMaturityLevel || "Nascent",
       aiSystemsCount: profile.organization?.aiSystemsCount || 0,
       primaryRole: profile.organization?.primaryRole || "Provider",

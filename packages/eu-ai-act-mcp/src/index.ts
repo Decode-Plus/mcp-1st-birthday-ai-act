@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 /**
  * EU AI Act MCP Server
  * Model Context Protocol server providing EU AI Act compliance tools
@@ -67,27 +65,49 @@ This tool researches an organization and creates a comprehensive profile includi
 The tool automatically discovers the company domain from web research if not provided.
 
 Based on EU AI Act Articles 16 (Provider Obligations), 22 (Authorized Representatives), and 49 (Registration Requirements).`,
-    inputSchema: {
-      organizationName: z.string().describe("Name of the organization to discover"),
-      context: z.string().optional().describe("Additional context about the organization (optional)"),
-    },
+    inputSchema: z.object({
+      organizationName: z.string().describe("Name of the organization to discover (required)"),
+      domain: z.string().optional().describe("Organization's domain (e.g., 'ibm.com'). Auto-discovered if not provided."),
+      context: z.string().optional().describe("Additional context about the organization"),
+    }),
   },
   async ({ organizationName, domain, context }: { organizationName: string; domain?: string; context?: string }) => {
-    // Execute tool
-    const result = await discoverOrganization({
-      organizationName,
-      domain,
-      context,
-    });
+    console.error(`[discover_organization] Called with: organizationName="${organizationName}", domain="${domain}", context="${context}"`);
     
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
+    try {
+      // Execute tool
+      const result = await discoverOrganization({
+        organizationName,
+        domain,
+        context,
+      });
+      
+      console.error(`[discover_organization] Completed, result has ${JSON.stringify(result).length} chars`);
+      
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      console.error(`[discover_organization] Error:`, error);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              error: true,
+              message: error instanceof Error ? error.message : "Unknown error occurred",
+              tool: "discover_organization",
+            }, null, 2),
+          },
+        ],
+        isError: true,
+      };
+    }
   }
 );
 
@@ -105,29 +125,51 @@ This tool scans for AI systems and provides comprehensive compliance analysis:
 - Registration status per Article 49
 
 Generates reports for systems requiring immediate attention with EU database registration obligations (Article 49, Annex VIII).`,
-    inputSchema: {
+    inputSchema: z.object({
       organizationContext: z.any().optional().describe("Organization profile from discover_organization tool (optional but recommended)"),
       systemNames: z.array(z.string()).optional().describe("Specific AI system names to discover (optional, scans all if not provided)"),
       scope: z.string().optional().describe("Scope of discovery: 'all' (default), 'high-risk-only', 'production-only'"),
-      context: z.string().optional().describe("Additional context about the systems (optional)"),
-    },
+      context: z.string().optional().describe("Additional context about the systems"),
+    }),
   },
-  async ({ organizationContext, systemNames, scope }: { organizationContext?: any; systemNames?: string[]; scope?: string }) => {
-    // Execute tool
-    const result = await discoverAIServices({
-      organizationContext,
-      systemNames,
-      scope,
-    });
+  async ({ organizationContext, systemNames, scope, context }: { organizationContext?: any; systemNames?: string[]; scope?: string; context?: string }) => {
+    console.error(`[discover_ai_services] Called with: systemNames=${JSON.stringify(systemNames)}, scope="${scope}"`);
     
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
+    try {
+      // Execute tool
+      const result = await discoverAIServices({
+        organizationContext,
+        systemNames,
+        scope,
+        context,
+      });
+      
+      console.error(`[discover_ai_services] Completed, found ${result.systems?.length || 0} systems`);
+      
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      console.error(`[discover_ai_services] Error:`, error);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              error: true,
+              message: error instanceof Error ? error.message : "Unknown error occurred",
+              tool: "discover_ai_services",
+            }, null, 2),
+          },
+        ],
+        isError: true,
+      };
+    }
   }
 );
 
@@ -145,7 +187,7 @@ This tool takes organization and AI services context to produce comprehensive co
 - Overall compliance score (0-100)
 - Chain-of-thought reasoning explanation
 
-Uses GPT-4 to analyze compliance status and generate professional documentation templates for:
+Uses xAI Grok-4 to analyze compliance status and generate professional documentation templates for:
 - Risk Management System (Article 9)
 - Technical Documentation (Article 11, Annex IV)
 - Conformity Assessment (Article 43)
@@ -154,31 +196,53 @@ Uses GPT-4 to analyze compliance status and generate professional documentation 
 - Human Oversight Procedure (Article 14)
 - Data Governance Policy (Article 10)
 
-Requires OPENAI_API_KEY environment variable to be set.`,
-    inputSchema: {
+Requires XAI_API_KEY environment variable to be set.`,
+    inputSchema: z.object({
       organizationContext: z.any().optional().describe("Organization profile from discover_organization tool (optional)"),
       aiServicesContext: z.any().optional().describe("AI services discovery results from discover_ai_services tool (optional)"),
       focusAreas: z.array(z.string()).optional().describe("Specific compliance areas to focus on (optional)"),
       generateDocumentation: z.boolean().optional().describe("Whether to generate documentation templates (default: true)"),
-    },
+    }),
   },
   async ({ organizationContext, aiServicesContext, focusAreas, generateDocumentation }: { organizationContext?: any; aiServicesContext?: any; focusAreas?: string[]; generateDocumentation?: boolean }) => {
-    // Execute tool
-    const result = await assessCompliance({
-      organizationContext,
-      aiServicesContext,
-      focusAreas,
-      generateDocumentation,
-    });
+    console.error(`[assess_compliance] Called with: focusAreas=${JSON.stringify(focusAreas)}, generateDocumentation=${generateDocumentation}`);
     
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
+    try {
+      // Execute tool
+      const result = await assessCompliance({
+        organizationContext,
+        aiServicesContext,
+        focusAreas,
+        generateDocumentation,
+      });
+      
+      console.error(`[assess_compliance] Completed, score: ${result.assessment?.overallScore || 'N/A'}`);
+      
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      console.error(`[assess_compliance] Error:`, error);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              error: true,
+              message: error instanceof Error ? error.message : "Unknown error occurred",
+              tool: "assess_compliance",
+              hint: "Make sure XAI_API_KEY environment variable is set",
+            }, null, 2),
+          },
+        ],
+        isError: true,
+      };
+    }
   }
 );
 

@@ -2,14 +2,16 @@
 """
 EU AI Act Compliance Agent - Gradio UI
 Interactive web interface for EU AI Act compliance assessment
+With MCP tool call visualization
 """
 
 import gradio as gr
+from gradio import ChatMessage
 import requests
 import json
 import os
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Generator
 from dotenv import load_dotenv
 
 # Load environment variables from root .env file
@@ -18,82 +20,170 @@ load_dotenv(ROOT_DIR / ".env")
 
 # API Configuration
 API_URL = os.getenv("API_URL", "http://localhost:3001")
-API_TIMEOUT = 60  # seconds
+API_TIMEOUT = 120  # seconds - increased for tool calls
 
-def chat_with_agent(message: str, history: list) -> Tuple[str, list]:
+def format_tool_call(tool_name: str, args: dict) -> str:
+    """Format a tool call for display"""
+    args_str = json.dumps(args, indent=2) if args else "{}"
+    return f"""
+🔧 **MCP Tool Call: `{tool_name}`**
+
+**Arguments:**
+```json
+{args_str}
+```
+"""
+
+def format_tool_result(tool_name: str, result) -> str:
+    """Format a tool result for display"""
+    # Truncate large results for display
+    result_str = json.dumps(result, indent=2) if result else "null"
+    if len(result_str) > 1500:
+        result_str = result_str[:1500] + "\n... (truncated)"
+    
+    return f"""
+✅ **Tool Result: `{tool_name}`**
+
+<details>
+<summary>📋 Click to expand result</summary>
+
+```json
+{result_str}
+```
+
+</details>
+"""
+
+def format_thinking_indicator() -> str:
+    """Format a thinking/processing indicator"""
+    return "\n\n⏳ *Processing with MCP tools...*\n"
+
+def chat_with_agent_streaming(message: str, history: list, initialized_history: list = None) -> Generator:
     """
-    Send a message to the EU AI Act agent and get a streaming response
+    Send a message to the EU AI Act agent and stream the response with tool calls
     
     Args:
         message: User's input message
-        history: Chat history in Gradio 6 messages format [{"role": "user/assistant", "content": "..."}]
+        history: Original chat history for API (without current user message)
+        initialized_history: Pre-initialized history with user message and loading (optional)
         
-    Returns:
-        Tuple of (empty string, updated history)
+    Yields:
+        Updated history with streaming content
     """
     if not message.strip():
-        return "", history
+        yield initialized_history or history
+        return
+    
+    # Use pre-initialized history or create one
+    if initialized_history:
+        new_history = list(initialized_history)
+    else:
+        new_history = list(history) + [
+            ChatMessage(role="user", content=message),
+            ChatMessage(role="assistant", content="⏳ *Thinking...*")
+        ]
     
     try:
+        # Convert original history to API format (handle both ChatMessage and dict)
+        api_history = []
+        for msg in history:
+            if isinstance(msg, dict):
+                api_history.append({"role": msg.get("role", "user"), "content": msg.get("content", "")})
+            else:
+                api_history.append({"role": msg.role, "content": msg.content})
+        
         # Make streaming request to API
         response = requests.post(
             f"{API_URL}/api/chat",
-            json={"message": message, "history": history},
+            json={"message": message, "history": api_history},
             stream=True,
             timeout=API_TIMEOUT,
         )
         
         if response.status_code != 200:
             error_msg = f"⚠️ Error: API returned status {response.status_code}"
-            new_history = history + [
-                {"role": "user", "content": message},
-                {"role": "assistant", "content": error_msg}
-            ]
-            return "", new_history
+            new_history[-1] = ChatMessage(role="assistant", content=error_msg)
+            yield new_history
+            return
         
-        # Collect streamed response
+        # Initialize assistant response
         bot_response = ""
+        tool_calls_content = ""
+        current_tool_call = None
+        
         for line in response.iter_lines():
             if line:
                 line_str = line.decode('utf-8')
+                print(f"[DEBUG] Received: {line_str[:100]}...")  # Debug log
                 if line_str.startswith('data: '):
                     try:
                         data = json.loads(line_str[6:])  # Remove 'data: ' prefix
-                        if data.get("type") == "text":
+                        event_type = data.get("type")
+                        print(f"[DEBUG] Event type: {event_type}, data: {str(data)[:100]}")
+                        
+                        if event_type == "text":
+                            # Append text chunk
                             bot_response += data.get("content", "")
-                        elif data.get("type") == "done":
+                            # Update the last message (replaces loading indicator)
+                            new_history[-1] = ChatMessage(role="assistant", content=tool_calls_content + bot_response)
+                            yield new_history
+                            
+                        elif event_type == "tool_call":
+                            # Show tool call (replaces loading indicator)
+                            tool_name = data.get("toolName", "unknown")
+                            args = data.get("args", {})
+                            tool_calls_content += format_tool_call(tool_name, args)
+                            new_history[-1] = ChatMessage(role="assistant", content=tool_calls_content + bot_response + format_thinking_indicator())
+                            yield new_history
+                            current_tool_call = tool_name
+                            
+                        elif event_type == "tool_result":
+                            # Show tool result
+                            tool_name = data.get("toolName", current_tool_call or "unknown")
+                            result = data.get("result")
+                            tool_calls_content += format_tool_result(tool_name, result)
+                            new_history[-1] = ChatMessage(role="assistant", content=tool_calls_content + bot_response)
+                            yield new_history
+                            current_tool_call = None
+                            
+                        elif event_type == "step_finish":
+                            # Step completed, remove thinking indicator
+                            new_history[-1] = ChatMessage(role="assistant", content=tool_calls_content + bot_response)
+                            yield new_history
+                            
+                        elif event_type == "error":
+                            error_msg = data.get("error", "Unknown error")
+                            bot_response += f"\n\n⚠️ Error: {error_msg}"
+                            new_history[-1] = ChatMessage(role="assistant", content=tool_calls_content + bot_response)
+                            yield new_history
+                            
+                        elif event_type == "done":
+                            # Final update
+                            new_history[-1] = ChatMessage(role="assistant", content=tool_calls_content + bot_response)
+                            yield new_history
                             break
+                            
                     except json.JSONDecodeError:
                         continue
         
-        # Add to history in Gradio 6 messages format
-        new_history = history + [
-            {"role": "user", "content": message},
-            {"role": "assistant", "content": bot_response}
-        ]
-        return "", new_history
+        # Ensure final state
+        final_content = tool_calls_content + (bot_response or "No response generated.")
+        new_history[-1] = ChatMessage(role="assistant", content=final_content)
+        yield new_history
         
     except requests.exceptions.ConnectionError:
         error_msg = "⚠️ Cannot connect to API server. Make sure it's running on http://localhost:3001"
-        new_history = history + [
-            {"role": "user", "content": message},
-            {"role": "assistant", "content": error_msg}
-        ]
-        return "", new_history
+        new_history = new_history + [ChatMessage(role="assistant", content=error_msg)]
+        yield new_history
     except requests.exceptions.Timeout:
         error_msg = "⚠️ Request timed out. The agent might be processing a complex query."
-        new_history = history + [
-            {"role": "user", "content": message},
-            {"role": "assistant", "content": error_msg}
-        ]
-        return "", new_history
+        final_content = tool_calls_content + bot_response + "\n\n" + error_msg
+        new_history[-1] = ChatMessage(role="assistant", content=final_content)
+        yield new_history
     except Exception as e:
         error_msg = f"⚠️ Error: {str(e)}"
-        new_history = history + [
-            {"role": "user", "content": message},
-            {"role": "assistant", "content": error_msg}
-        ]
-        return "", new_history
+        new_history = new_history + [ChatMessage(role="assistant", content=error_msg)]
+        yield new_history
 
 def check_api_status() -> str:
     """Check if the API server is running"""
@@ -108,6 +198,21 @@ def check_api_status() -> str:
         return "❌ API Server not running. Start it with: pnpm dev"
     except Exception as e:
         return f"❌ Error: {str(e)}"
+
+def get_available_tools() -> str:
+    """Get list of available MCP tools"""
+    try:
+        response = requests.get(f"{API_URL}/api/tools", timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            tools = data.get("tools", [])
+            if tools:
+                tool_list = "\n".join([f"• **{t['name']}**" for t in tools])
+                return f"**Available MCP Tools:**\n{tool_list}"
+            return "No tools available"
+        return "Could not fetch tools"
+    except:
+        return "Could not connect to API"
 
 def get_example_queries() -> List[List[str]]:
     """Get example queries for the interface"""
@@ -127,19 +232,20 @@ with gr.Blocks(
     
     # Header
     gr.HTML("""
-        <div class="header">
-            <h1>🇪🇺 EU AI Act Compliance Agent</h1>
-            <p>Your intelligent assistant for navigating European AI regulation</p>
+        <div style="text-align: center; padding: 20px 0;">
+            <h1 style="margin: 0; font-size: 2em;">🇪🇺 EU AI Act Compliance Agent</h1>
+            <p style="margin: 10px 0 0 0; opacity: 0.8;">by <a href="https://www.legitima.ai" target="_blank" style="color: #4CAF50;">Legitima.ai</a></p>
+            <p style="margin: 5px 0; font-size: 0.9em; opacity: 0.7;">Your intelligent assistant for navigating European AI regulation</p>
         </div>
     """)
     
     # Main content
     with gr.Row():
-        with gr.Column(scale=2):
-            # Chat interface - Gradio 6 uses messages format by default
+        with gr.Column(scale=3):
+            # Chat interface - using ChatMessage format
             chatbot = gr.Chatbot(
                 label="Chat with EU AI Act Expert",
-                height=500,
+                height=550,
                 show_label=True,
             )
             
@@ -159,51 +265,76 @@ with gr.Blocks(
         
         with gr.Column(scale=1):
             # Sidebar
-            gr.Markdown("### 📊 Quick Info")
+            gr.Markdown("### 📊 Quick Reference")
             
             gr.Markdown("""
-            **Risk Categories:**
-            - 🔴 Unacceptable Risk
-            - 🟠 High Risk
-            - 🟡 Limited Risk
-            - 🟢 Minimal Risk
-            
-            **Key Features:**
-            - Organization profiling
-            - AI system discovery
-            - Risk classification
-            - Gap analysis
-            - Document generation
-            
-            **Timeline:**
-            - Feb 2, 2025: Banned AI takes effect
-            - Aug 2, 2026: High-risk obligations
-            - Aug 2, 2027: Full enforcement
+**Risk Categories:**
+- 🔴 **Unacceptable** - Banned
+- 🟠 **High Risk** - Strict requirements
+- 🟡 **Limited Risk** - Transparency
+- 🟢 **Minimal Risk** - No obligations
+
+**Key Deadlines:**
+- 📅 Feb 2, 2025: Banned AI
+- 📅 Aug 2, 2026: High-risk rules
+- 📅 Aug 2, 2027: Full enforcement
             """)
             
+            gr.Markdown("---")
+            
+            tools_info = gr.Markdown(
+                value=get_available_tools(),
+                label="MCP Tools"
+            )
+            
+            gr.Markdown("---")
+            
             status = gr.Textbox(
-                label="API Status",
+                label="🔌 API Status",
                 value=check_api_status(),
                 interactive=False,
                 max_lines=2,
             )
             
-            refresh_btn = gr.Button("🔄 Refresh Status", size="sm")
-            clear_btn = gr.Button("🗑️ Clear Chat", size="sm")
+            with gr.Row():
+                refresh_btn = gr.Button("🔄 Refresh", size="sm")
+                clear_btn = gr.Button("🗑️ Clear", size="sm")
     
     # Footer
     gr.Markdown("""
-    ---
-    <div style="text-align: center; opacity: 0.7;">
-        <p>Built for the MCP 1st Birthday Hackathon 🎂</p>
-        <p>Powered by Vercel AI SDK v5 + Gradio + EU AI Act MCP Server</p>
-    </div>
+---
+<div style="text-align: center; opacity: 0.6; font-size: 0.85em;">
+    <p>Built for the MCP 1st Birthday Hackathon 🎂</p>
+    <p>Powered by Vercel AI SDK v5 + Model Context Protocol + Gradio</p>
+</div>
     """)
     
-    # Event handlers
-    msg.submit(chat_with_agent, [msg, chatbot], [msg, chatbot])
-    submit.click(chat_with_agent, [msg, chatbot], [msg, chatbot])
-    refresh_btn.click(lambda: check_api_status(), None, status)
+    # Event handlers - clear input immediately and stream response together
+    def respond_and_clear(message: str, history: list):
+        """Wrapper that yields (cleared_input, chat_history) tuples"""
+        if not message.strip():
+            yield "", history
+            return
+            
+        # First yield: clear input and show loading immediately
+        initial_history = list(history) + [
+            ChatMessage(role="user", content=message),
+            ChatMessage(role="assistant", content="⏳ *Thinking...*")
+        ]
+        yield "", initial_history
+        
+        # Then stream the actual response (pass initialized_history to avoid duplication)
+        for updated_history in chat_with_agent_streaming(message, history, initial_history):
+            yield "", updated_history
+    
+    # On submit/click: clear input immediately while streaming response
+    msg.submit(respond_and_clear, [msg, chatbot], [msg, chatbot])
+    submit.click(respond_and_clear, [msg, chatbot], [msg, chatbot])
+    refresh_btn.click(
+        lambda: (check_api_status(), get_available_tools()), 
+        None, 
+        [status, tools_info]
+    )
     clear_btn.click(lambda: [], None, chatbot)
 
 # Launch the app
@@ -222,4 +353,3 @@ if __name__ == "__main__":
         share=True,
         show_error=True,
     )
-

@@ -88,6 +88,12 @@ export const OrganizationProfileSchema = z.object({
       phone: z.string().optional(),
       website: z.string().url().optional(),
     }),
+    branding: z.object({
+      logoUrl: z.string().url().optional(),
+      primaryColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+      palette: z.array(z.string().regex(/^#[0-9A-Fa-f]{6}$/)).optional(),
+      source: z.enum(["logo-extraction", "known-brand", "fallback"]).optional(),
+    }).optional(),
     aiMaturityLevel: AIMaturityLevelSchema,
     aiSystemsCount: z.number().optional(),
     primaryRole: ProviderRoleSchema,

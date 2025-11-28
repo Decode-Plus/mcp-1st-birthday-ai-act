@@ -106,6 +106,18 @@ export interface OrganizationProfile {
       website?: string;
     };
     
+    /** Branding information extracted from organization's visual identity */
+    branding?: {
+      /** URL to the organization's logo */
+      logoUrl?: string;
+      /** Primary brand color in hex format (e.g., "#1DA1F2") */
+      primaryColor?: string;
+      /** Color palette extracted from logo (array of hex colors) */
+      palette?: string[];
+      /** Source of the branding data */
+      source?: "logo-extraction" | "known-brand" | "fallback";
+    };
+    
     /** AI maturity assessment */
     aiMaturityLevel: AIMaturityLevel;
     
@@ -430,6 +442,9 @@ export interface DiscoverAIServicesInput {
   
   /** Scope of discovery (e.g., "all", "high-risk-only") */
   scope?: string;
+  
+  /** Additional context about the AI systems to discover */
+  context?: string;
 }
 
 /**

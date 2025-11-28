@@ -852,7 +852,9 @@ function analyzeComplianceGaps(system: AISystemProfile): string[] {
 export async function discoverAIServices(
   input: DiscoverAIServicesInput
 ): Promise<AISystemsDiscoveryResponse> {
-  const { organizationContext, systemNames, scope } = input;
+  const { organizationContext, systemNames, scope, context } = input;
+
+  console.error(`[discoverAIServices] Starting discovery with: systemNames=${JSON.stringify(systemNames)}, scope=${scope}, context=${context}`);
 
   // Step 1: Scan for AI systems
   const systems = await scanForAISystems(organizationContext, systemNames);

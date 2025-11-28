@@ -11,7 +11,7 @@ A Model Context Protocol (MCP) server providing organization discovery and AI sy
 - ⚖️ **Compliance Analysis** - Gap analysis with specific Article references from the AI Act
 - 📊 **Risk Classification** - Automated risk categorization (Unacceptable, High, Limited, Minimal)
 - 📝 **Documentation Status** - Track technical documentation and conformity assessment requirements
-- 🧠 **AI-Powered Assessment** - GPT-4 powered compliance assessment with documentation generation
+- 🧠 **AI-Powered Assessment** - Grok 4.1 reasoning powered compliance assessment with documentation generation
 
 ## Installation
 
@@ -54,13 +54,13 @@ This MCP server uses **Tavily AI** for intelligent company research and organiza
    Create a `.env` file in the project root:
    ```bash
    TAVILY_API_KEY=tvly-YOUR_API_KEY
-   OPENAI_API_KEY=sk-YOUR_OPENAI_KEY  # Required for assess_compliance tool
+   XAI_API_KEY=xai-YOUR_XAI_KEY  # Required for assess_compliance tool
    ```
 
    Or set as environment variable:
    ```bash
    export TAVILY_API_KEY=tvly-YOUR_API_KEY
-   export OPENAI_API_KEY=sk-YOUR_OPENAI_KEY
+   export XAI_API_KEY=xai-YOUR_XAI_KEY
    ```
 
 3. **For Claude Desktop**, add the environment variables to your config:
@@ -73,7 +73,7 @@ This MCP server uses **Tavily AI** for intelligent company research and organiza
          "args": ["/path/to/packages/eu-ai-act-mcp/dist/index.js"],
          "env": {
            "TAVILY_API_KEY": "tvly-YOUR_API_KEY",
-           "OPENAI_API_KEY": "sk-YOUR_OPENAI_KEY"
+           "XAI_API_KEY": "xai-YOUR_XAI_KEY"
          }
        }
      }
@@ -352,7 +352,7 @@ Discovers and classifies AI systems within an organization according to EU AI Ac
 
 ### 3. `assess_compliance`
 
-AI-powered compliance assessment and documentation generator using GPT-4.
+AI-powered compliance assessment and documentation generator using Grok 4.1 reasoning models.
 
 **Input:**
 ```json
@@ -413,7 +413,7 @@ AI-powered compliance assessment and documentation generator using GPT-4.
   metadata: {
     assessmentDate: string;
     assessmentVersion: string;
-    modelUsed: string;           // e.g., "gpt-5-chat-latest"
+    modelUsed: string;           // e.g., "grok-4-1-fast-reasoning"
     organizationAssessed?: string;
     systemsAssessed: string[];
     focusAreas: string[];
@@ -436,8 +436,8 @@ AI-powered compliance assessment and documentation generator using GPT-4.
 - Annex IV (Technical Documentation Requirements)
 
 **Requirements:**
-- `OPENAI_API_KEY` environment variable must be set
-- Uses gpt-5-chat-latest for intelligent compliance analysis
+- `XAI_API_KEY` environment variable must be set
+- Uses Grok 4.1 reasoning models for intelligent compliance analysis
 - Generates professional documentation templates in Markdown
 
 ## Testing
@@ -454,7 +454,7 @@ The test agent will:
 2. List available tools
 3. Test organization discovery
 4. Test AI services discovery
-5. Test AI-powered compliance assessment (requires `OPENAI_API_KEY`)
+5. Test AI-powered compliance assessment (requires `XAI_API_KEY`)
 6. Display compliance gaps and recommendations
 7. Show generated documentation templates
 
@@ -528,7 +528,7 @@ app.listen(3000, () => {
          │  └─────────────────────┘    │
          │                             │
          │  ┌─────────────────────┐    │
-         │  │  assess_            │◄──┼──── OpenAI GPT-4
+         │  │  assess_            │◄──┼──── xAI Grok 4.1 Reasoning
          │  │  compliance         │    │
          │  └─────────────────────┘    │
          └─────────────────────────────┘
@@ -550,7 +550,7 @@ packages/eu-ai-act-mcp/
 │   └── tools/
 │       ├── discover-organization.ts   # Tavily-powered org discovery
 │       ├── discover-ai-services.ts    # AI systems inventory
-│       └── assess-compliance.ts       # GPT-4 compliance assessment
+│       └── assess-compliance.ts       # Grok 4.1 reasoning compliance assessment
 ├── package.json
 ├── tsconfig.json
 └── README.md
@@ -599,7 +599,7 @@ Contributions are welcome! This is a hackathon project for the MCP 1st Birthday 
 - [EU AI Act Official Text](https://eur-lex.europa.eu/eli/reg/2024/1689/oj)
 - [AI Act Explorer](https://artificialintelligenceact.eu/)
 - [Model Context Protocol](https://modelcontextprotocol.io/)
-- [OpenAI Apps SDK](https://developers.openai.com/apps-sdk/)
+- [xAI API Documentation](https://docs.x.ai/)
 - [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk)
 
 ---

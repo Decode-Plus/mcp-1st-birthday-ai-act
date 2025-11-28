@@ -2,7 +2,7 @@
  * Compliance Assessment Tool
  * Implements EU AI Act compliance analysis using AI-powered assessment
  * 
- * Uses OpenAI GPT-4 to analyze:
+ * Uses xAI Grok 4 via Vercel AI SDK to analyze:
  * - Gap analysis against AI Act requirements
  * - Risk-specific compliance checklists
  * - Draft documentation templates
@@ -18,7 +18,8 @@
  * - Annex IV (Technical Documentation)
  */
 
-import OpenAI from "openai";
+import { xai } from "@ai-sdk/xai";
+import { generateText } from "ai";
 import type {
   OrganizationProfile,
   AISystemsDiscoveryResponse,
@@ -30,20 +31,20 @@ import type {
 } from "../types/index.js";
 
 /**
- * OpenAI client instance
+ * Get the xAI Grok 4 model instance
  */
-function getOpenAIClient(): OpenAI {
-  const apiKey = process.env.OPENAI_API_KEY;
+function getModel() {
+  const apiKey = process.env.XAI_API_KEY;
   
   if (!apiKey) {
-    throw new Error("OPENAI_API_KEY environment variable is required for compliance assessment");
+    throw new Error("XAI_API_KEY environment variable is required for compliance assessment");
   }
   
-  return new OpenAI({ apiKey });
+  return xai("grok-4-1-fast-reasoning");
 }
 
 /**
- * EU AI Act Knowledge Base for GPT-4 context
+ * EU AI Act Knowledge Base for AI context
  */
 const EU_AI_ACT_CONTEXT = `
 You are an expert EU AI Act compliance consultant. You have deep knowledge of:
@@ -241,16 +242,16 @@ Generate comprehensive, professional documentation templates that:
 }
 
 /**
- * Parse GPT response safely
+ * Parse JSON response safely
  */
-function parseGPTResponse<T>(content: string): T | null {
+function parseJSONResponse<T>(content: string): T | null {
   try {
     // Try to extract JSON from markdown code blocks if present
     const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
     const jsonStr = jsonMatch ? jsonMatch[1].trim() : content.trim();
     return JSON.parse(jsonStr) as T;
   } catch (error) {
-    console.error("Failed to parse GPT response:", error);
+    console.error("Failed to parse JSON response:", error);
     // Try to parse without code blocks
     try {
       // Remove any leading/trailing non-JSON content
@@ -307,26 +308,155 @@ function calculateOverallScore(
 export async function assessCompliance(
   input: ComplianceAssessmentInput
 ): Promise<ComplianceAssessmentResponse> {
-  const { organizationContext, aiServicesContext, focusAreas, generateDocumentation = true } = input;
+  let { organizationContext, aiServicesContext, focusAreas, generateDocumentation = true } = input;
+  
+  // Normalize organizationContext - handle both full and simplified formats
+  if (organizationContext && !organizationContext.organization) {
+    // Model passed simplified format like { name: "IBM", sector: "Technology" }
+    console.error("[assess_compliance] Normalizing simplified organization context");
+    const ctx = organizationContext as unknown as Record<string, unknown>;
+    organizationContext = {
+      organization: {
+        name: (ctx.name as string) || "Unknown",
+        sector: (ctx.sector as string) || "Technology",
+        size: ((ctx.size as string) || "Enterprise") as OrganizationProfile["organization"]["size"],
+        jurisdiction: (ctx.jurisdiction as string[]) || ["EU"],
+        euPresence: (ctx.euPresence as boolean) ?? true,
+        headquarters: (ctx.headquarters as { country: string; city: string }) || { country: "Unknown", city: "Unknown" },
+        contact: (ctx.contact as { email: string }) || { email: "unknown@example.com" },
+        aiMaturityLevel: ((ctx.aiMaturityLevel as string) || "Developing") as OrganizationProfile["organization"]["aiMaturityLevel"],
+        aiSystemsCount: (ctx.aiSystemsCount as number) || 0,
+        primaryRole: ((ctx.primaryRole as string) || "Provider") as OrganizationProfile["organization"]["primaryRole"],
+      },
+      regulatoryContext: {
+        applicableFrameworks: ["EU AI Act", "GDPR"],
+        complianceDeadlines: [],
+        existingCertifications: [],
+        hasQualityManagementSystem: false,
+        hasRiskManagementSystem: false,
+      },
+      metadata: {
+        createdAt: new Date().toISOString(),
+        lastUpdated: new Date().toISOString(),
+        completenessScore: 50,
+        dataSource: "normalized-input",
+      },
+    };
+  }
+  
+  // Normalize aiServicesContext - handle simplified formats
+  if (aiServicesContext && !aiServicesContext.riskSummary) {
+    console.error("[assess_compliance] Normalizing simplified AI services context");
+    const systems = aiServicesContext.systems || [];
+    aiServicesContext = {
+      systems: systems.map((s: any) => ({
+        system: {
+          name: s.name || "Unknown System",
+          systemId: s.systemId || `sys-${Date.now()}`,
+          description: s.description || "AI System",
+          intendedPurpose: s.intendedPurpose || "General AI usage",
+          version: s.version || "1.0.0",
+          status: s.status || "Production",
+          provider: s.provider || { name: "Unknown", role: "Provider", contact: "unknown@example.com" },
+        },
+        riskClassification: {
+          category: s.riskLevel || s.riskCategory || "Minimal",
+          safetyComponent: false,
+          annexIIICategory: "N/A",
+          justification: "Normalized from simplified input",
+          riskScore: 50,
+          conformityAssessmentRequired: false,
+          conformityAssessmentType: "Not Required",
+          regulatoryReferences: [],
+        },
+        technicalDetails: {
+          aiTechnology: s.aiTechnology || ["Machine Learning"],
+          dataProcessed: s.dataProcessed || ["User data"],
+          processesSpecialCategoryData: false,
+          deploymentModel: "Cloud",
+          vendor: "Unknown",
+          integrations: [],
+          humanOversight: { enabled: true, description: "Human oversight in place" },
+        },
+        complianceStatus: {
+          hasTechnicalDocumentation: false,
+          conformityAssessmentStatus: "Not Started",
+          hasEUDeclaration: false,
+          hasCEMarking: false,
+          registeredInEUDatabase: false,
+          hasPostMarketMonitoring: false,
+          hasAutomatedLogging: false,
+          qualityManagementSystem: false,
+          riskManagementSystem: false,
+          identifiedGaps: s.complianceIssues || [],
+          complianceDeadline: "2027-08-02",
+          estimatedComplianceEffort: "To be determined",
+        },
+        metadata: {
+          createdAt: new Date().toISOString(),
+          lastUpdated: new Date().toISOString(),
+          dataSource: "normalized-input",
+          discoveryMethod: "manual",
+          researchSources: [],
+        },
+      })),
+      riskSummary: {
+        unacceptableRiskCount: 0,
+        highRiskCount: systems.filter((s: any) => (s.riskLevel || s.riskCategory) === "High").length,
+        limitedRiskCount: systems.filter((s: any) => (s.riskLevel || s.riskCategory) === "Limited").length,
+        minimalRiskCount: systems.filter((s: any) => !s.riskLevel || s.riskLevel === "Minimal").length,
+        totalCount: systems.length,
+      },
+      complianceSummary: {
+        fullyCompliantCount: 0,
+        partiallyCompliantCount: systems.length,
+        nonCompliantCount: 0,
+        requiresAttention: [],
+        criticalGapCount: 0,
+        highGapCount: 0,
+        overallCompliancePercentage: 50,
+      },
+      regulatoryFramework: {
+        legislation: "Regulation (EU) 2024/1689 - Artificial Intelligence Act",
+        officialJournal: "OJ L 2024/1689, 12.7.2024",
+        entryIntoForce: "August 1, 2024",
+        implementationTimeline: "Phased through August 2, 2026",
+        jurisdiction: "EU-wide",
+      },
+      complianceDeadlines: {
+        highRisk: "August 2, 2026",
+        limitedRisk: "June 2, 2026",
+        generalGPAI: "August 2, 2026",
+      },
+      discoverySources: ["normalized-input"],
+      discoveryMetadata: {
+        timestamp: new Date().toISOString(),
+        method: "normalized-from-input",
+        coverage: `${systems.length} systems`,
+        researchIntegration: "N/A",
+        conformityAssessmentUrgency: "Review required",
+      },
+    };
+  }
   
   console.error("\n🔍 Starting EU AI Act Compliance Assessment");
   console.error("=".repeat(60));
   
-  if (organizationContext) {
+  if (organizationContext?.organization) {
     console.error(`📋 Organization: ${organizationContext.organization.name}`);
   }
-  if (aiServicesContext) {
+  if (aiServicesContext?.riskSummary) {
     console.error(`🤖 AI Systems: ${aiServicesContext.riskSummary.totalCount} total`);
     console.error(`   - High-Risk: ${aiServicesContext.riskSummary.highRiskCount}`);
     console.error(`   - Limited-Risk: ${aiServicesContext.riskSummary.limitedRiskCount}`);
   }
   console.error("-".repeat(60));
   
-  const openai = getOpenAIClient();
+  const model = getModel();
   const now = new Date().toISOString();
   
-  // Step 1: Generate compliance assessment using GPT-4
-  console.error("\n🧠 Analyzing compliance with GPT-4...");
+  // Step 1: Generate compliance assessment using Grok 4
+  console.error("\n🧠 Analyzing compliance with Grok 4...");
   
   const assessmentPrompt = generateAssessmentPrompt(
     organizationContext,
@@ -334,25 +464,15 @@ export async function assessCompliance(
     focusAreas
   );
   
-  const assessmentResponse = await openai.chat.completions.create({
-    model: "gpt-5-chat-latest",
-    messages: [
-      {
-        role: "system",
-        content: "You are an expert EU AI Act compliance consultant. Provide detailed, actionable compliance assessments in valid JSON format only.",
-      },
-      {
-        role: "user",
-        content: assessmentPrompt,
-      },
-    ],
+  const assessmentResponse = await generateText({
+    model,
+    system: "You are an expert EU AI Act compliance consultant. Provide detailed, actionable compliance assessments in valid JSON format only. Always respond with a valid JSON object.",
+    prompt: assessmentPrompt,
     temperature: 0.3,
-    max_tokens: 8192,
-    response_format: { type: "json_object" },
   });
   
-  const assessmentContent = assessmentResponse.choices[0]?.message?.content || "{}";
-  const assessmentData = parseGPTResponse<{
+  const assessmentContent = assessmentResponse.text || "{}";
+  const assessmentData = parseJSONResponse<{
     overallScore: number;
     riskLevel: string;
     gaps: GapAnalysis[];
@@ -361,7 +481,7 @@ export async function assessCompliance(
   }>(assessmentContent);
   
   if (!assessmentData) {
-    throw new Error("Failed to parse compliance assessment from GPT-4");
+    throw new Error("Failed to parse compliance assessment from Grok 4");
   }
   
   console.error(`✅ Assessment complete: Score ${assessmentData.overallScore}/100`);
@@ -381,25 +501,15 @@ export async function assessCompliance(
       { gaps: assessmentData.gaps, recommendations: assessmentData.recommendations }
     );
     
-    const docResponse = await openai.chat.completions.create({
-      model: "gpt-5-chat-latest",
-      messages: [
-        {
-          role: "system",
-          content: "You are an expert EU AI Act compliance documentation specialist. Generate professional documentation templates in valid JSON format with markdown content.",
-        },
-        {
-          role: "user",
-          content: docPrompt,
-        },
-      ],
+    const docResponse = await generateText({
+      model,
+      system: "You are an expert EU AI Act compliance documentation specialist. Generate professional documentation templates in valid JSON format with markdown content. Always respond with a valid JSON object.",
+      prompt: docPrompt,
       temperature: 0.2,
-      max_tokens: 8192,
-      response_format: { type: "json_object" },
     });
     
-    const docContent = docResponse.choices[0]?.message?.content || "{}";
-    documentation = parseGPTResponse<ComplianceDocumentation>(docContent) || undefined;
+    const docContent = docResponse.text || "{}";
+    documentation = parseJSONResponse<ComplianceDocumentation>(docContent) || undefined;
     
     if (documentation) {
       console.error("✅ Documentation templates generated");
@@ -412,7 +522,7 @@ export async function assessCompliance(
     aiServicesContext
   );
   
-  // Use GPT's score if available, otherwise use calculated
+  // Use AI-assessed score if available, otherwise use calculated
   const finalScore = assessmentData.overallScore || calculatedScore;
   
   // Build response
@@ -429,7 +539,7 @@ export async function assessCompliance(
     metadata: {
       assessmentDate: now,
       assessmentVersion: "1.0.0",
-      modelUsed: "gpt-5-chat-latest",
+      modelUsed: "xai-grok-4-1-fast-reasoning",
       organizationAssessed: organizationContext?.organization.name,
       systemsAssessed: aiServicesContext?.systems.map(s => s.system.name) || [],
       focusAreas: focusAreas || [],

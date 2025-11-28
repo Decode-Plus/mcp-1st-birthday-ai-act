@@ -16,7 +16,7 @@ An interactive AI agent with Gradio UI for navigating EU AI Act compliance requi
 │         (Node.js + Vercel AI SDK v5)                    │
 │   ┌─────────────────────────────────────────────────┐   │
 │   │  AI Agent with Tool Calling                     │   │
-│   │  - GPT-4 or gpt-5-chat-latest                              │   │
+│   │  - Grok 4.1 Reasoning Models                               │   │
 │   │  - Streaming responses                          │   │
 │   │  - Contextual awareness                         │   │
 │   └─────────────────────────────────────────────────┘   │
@@ -61,7 +61,7 @@ An interactive AI agent with Gradio UI for navigating EU AI Act compliance requi
 - **Node.js** 18+ and pnpm 8+
 - **Python** 3.9+ with uv (fast package manager)
 - **API Keys**:
-  - OpenAI API key (required)
+  - xAI API key (required)
   - Tavily API key (optional, for enhanced research)
 
 ### Installation
@@ -83,7 +83,7 @@ uv pip install -r requirements.txt
 3. **Set up environment variables**:
 ```bash
 cp .env.example .env
-# Edit .env and add your OPENAI_API_KEY and TAVILY_API_KEY
+# Edit .env and add your XAI_API_KEY and TAVILY_API_KEY
 ```
 
 ### Running the Agent
@@ -162,7 +162,7 @@ Agent: I'll assess your chatbot and generate the required documents...
 
 ### API Server (`src/server.ts`)
 - **Port**: Configure via `PORT` env var (default: 3001)
-- **Model**: Configured to use GPT-4 (can switch to gpt-5-chat-latest)
+- **Model**: Configured to use Grok 4.1 reasoning models
 - **Streaming**: Enabled for real-time responses
 - **CORS**: Configured for Gradio origin
 
@@ -232,7 +232,7 @@ curl -X POST http://localhost:3001/api/chat \
 
 - **Backend**: Node.js + Express + TypeScript
 - **AI SDK**: Vercel AI SDK v5 (upgraded from v4)
-- **LLM**: OpenAI GPT-4 / gpt-5-chat-latest
+- **LLM**: xAI Grok 4.1 Reasoning Models
 - **Frontend**: Gradio (Python)
 - **MCP**: Model Context Protocol for tool integration
 - **Monorepo**: Turborepo for efficient builds

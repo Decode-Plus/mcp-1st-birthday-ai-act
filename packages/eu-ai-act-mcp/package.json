@@ -23,11 +23,13 @@
     "lint:fix": "biome check --write ."
   },
   "dependencies": {
-    "@ai-sdk/openai": "^1.0.0",
+    "@ai-sdk/openai": "^2.0.74",
+    "@ai-sdk/xai": "^2.0.39",
     "@modelcontextprotocol/sdk": "^1.23.0",
     "@tavily/core": "^0.5.13",
-    "ai": "^5.0.0",
-    "openai": "^4.77.0",
+    "ai": "^5.0.104",
+    "colorthief": "^2.6.0",
+    "openai": "^6.9.1",
     "zod": "^3.23.8"
   },
   "devDependencies": {

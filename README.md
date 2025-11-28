@@ -253,12 +253,12 @@ The MCP server now integrates with **[Tavily AI](https://tavily.com)** for intel
 
 #### What It Discovers:
 
-| Research Area | Information Extracted | EU AI Act Mapping |
-|--------------|----------------------|-------------------|
-| **Company Overview** | Business model, sector, size, headquarters | Article 16 (Provider obligations) |
-| **AI Capabilities** | AI maturity level, ML/AI technologies, products | Article 6 (Risk classification) |
-| **Compliance Status** | ISO certifications, GDPR compliance, QMS | Article 17 (Quality management) |
-| **EU Presence** | Jurisdictions, European operations | Article 22 (Authorized representative) |
+| Research Area         | Information Extracted                           | EU AI Act Mapping                      |
+| --------------------- | ----------------------------------------------- | -------------------------------------- |
+| **Company Overview**  | Business model, sector, size, headquarters      | Article 16 (Provider obligations)      |
+| **AI Capabilities**   | AI maturity level, ML/AI technologies, products | Article 6 (Risk classification)        |
+| **Compliance Status** | ISO certifications, GDPR compliance, QMS        | Article 17 (Quality management)        |
+| **EU Presence**       | Jurisdictions, European operations              | Article 22 (Authorized representative) |
 
 #### Setup:
 
@@ -298,7 +298,7 @@ An interactive AI agent that guides organizations through the entire compliance 
 ┌─────────────────────────────────────────────────────────┐
 │         Express API + Vercel AI SDK v5 Agent            │
 │   ┌─────────────────────────────────────────────────┐   │
-│   │  gpt-5-chat-latest with Streaming & Tool Calling           │   │
+│   │  Grok 4.1 Reasoning with Streaming & Tool Calling         │   │
 │   │  - Context management                           │   │
 │   │  - Multi-step workflows                         │   │
 │   │  - Intelligent tool orchestration               │   │
@@ -333,7 +333,7 @@ An interactive AI agent that guides organizations through the entire compliance 
 - **[Gradio](https://gradio.app/)** — Interactive web UI with chat interface
 - **[Express](https://expressjs.com/)** — REST API server
 - **[MCP](https://modelcontextprotocol.io/)** — Tool integration protocol
-- **[OpenAI gpt-5-chat-latest](https://openai.com/)** — Language model for intelligent responses
+- **[xAI Grok 4.1 Reasoning](https://x.ai/)** — Language model for intelligent responses
 
 ### 🚀 Quick Start
 
@@ -344,7 +344,7 @@ cd apps/eu-ai-act-agent
 pip3 install -r requirements.txt
 
 # Set API key
-export OPENAI_API_KEY="sk-your-key"
+export XAI_API_KEY="xai-your-key"
 
 # Start everything
 ./start.sh
@@ -383,7 +383,7 @@ cd ../..
 
 # Set up environment variables
 cp .env.example .env
-# Edit .env and add your OPENAI_API_KEY and TAVILY_API_KEY
+# Edit .env and add your XAI_API_KEY and TAVILY_API_KEY
 
 # Build the MCP server
 pnpm --filter @eu-ai-act/mcp-server build

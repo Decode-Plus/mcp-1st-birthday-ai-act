@@ -110,7 +110,7 @@ This tool takes organization and AI services context to produce comprehensive co
 - Overall compliance score (0-100)
 - Chain-of-thought reasoning explanation
 
-Uses GPT-4 to analyze compliance status and generate professional documentation templates for:
+Uses xAI Grok-4 to analyze compliance status and generate professional documentation templates for:
 - Risk Management System (Article 9)
 - Technical Documentation (Article 11, Annex IV)
 - Conformity Assessment (Article 43)
@@ -119,7 +119,7 @@ Uses GPT-4 to analyze compliance status and generate professional documentation 
 - Human Oversight Procedure (Article 14)
 - Data Governance Policy (Article 10)
 
-Requires OPENAI_API_KEY environment variable to be set.`,
+Requires XAI_API_KEY environment variable to be set.`,
 
   parameters: z.object({
     organizationName: z.string().optional().describe("Organization name to assess compliance for (optional)"),
