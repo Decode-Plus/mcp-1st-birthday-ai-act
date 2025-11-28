@@ -21,7 +21,7 @@ load_dotenv(ROOT_DIR / ".env")
 
 # API Configuration
 API_URL = os.getenv("API_URL", "http://localhost:3001")
-API_TIMEOUT = 120  # seconds - increased for tool calls
+API_TIMEOUT = 600  # seconds - increased for long-running compliance assessments
 
 # Model Configuration
 AVAILABLE_MODELS = {
@@ -98,9 +98,278 @@ def format_tool_call(tool_name: str, args: dict) -> str:
 ```
 """
 
+def format_thinking_section(thinking_text: str, tool_name: str = None) -> str:
+    """Format AI thinking/reasoning in a collapsible section"""
+    if not thinking_text or not thinking_text.strip():
+        return ""
+    
+    # Clean up the thinking text
+    thinking_clean = thinking_text.strip()
+    
+    # Create a descriptive title based on context
+    if tool_name:
+        title = f"🧠 AI Reasoning (before {tool_name.replace('_', ' ').title()})"
+    else:
+        title = "🧠 AI Reasoning"
+    
+    return f"""
+<details>
+<summary>{title}</summary>
+
+*The model's thought process:*
+
+{thinking_clean}
+
+</details>
+"""
+
 def format_tool_result(tool_name: str, result) -> str:
     """Format a tool result for display"""
-    # Truncate large results for display
+    
+    # Special handling for assess_compliance - show generated documentation with full content
+    if tool_name == "assess_compliance" and result:
+        output = f"\n✅ **Tool Result: `{tool_name}`**\n\n"
+        
+        # Extract key information
+        assessment = result.get("assessment", {})
+        metadata = result.get("metadata", {})
+        documentation = result.get("documentation", {})
+        reasoning = result.get("reasoning", "")
+        doc_files = metadata.get("documentationFiles", [])
+        
+        # Show assessment summary
+        if assessment:
+            score = assessment.get("overallScore", "N/A")
+            risk_level = assessment.get("riskLevel", "N/A")
+            gaps = assessment.get("gaps", [])
+            recommendations = assessment.get("recommendations", [])
+            gaps_count = len(gaps)
+            recs_count = len(recommendations)
+            
+            # Risk level emoji
+            risk_emoji = {"CRITICAL": "🔴", "HIGH": "🟠", "MEDIUM": "🟡", "LOW": "🟢"}.get(risk_level, "⚪")
+            
+            output += f"""### 📊 Compliance Assessment Summary
+
+| Metric | Value |
+|--------|-------|
+| **Overall Score** | **{score}/100** |
+| **Risk Level** | {risk_emoji} **{risk_level}** |
+| **Gaps Identified** | {gaps_count} |
+| **Recommendations** | {recs_count} |
+
+"""
+            
+            # Show AI reasoning in collapsible section
+            if reasoning:
+                output += f"""
+<details>
+<summary>🧠 AI Reasoning & Analysis</summary>
+
+{reasoning}
+
+</details>
+
+"""
+            
+            # Show gaps summary in collapsible section
+            if gaps:
+                critical_gaps = [g for g in gaps if g.get("severity") == "CRITICAL"]
+                high_gaps = [g for g in gaps if g.get("severity") == "HIGH"]
+                
+                output += f"""
+<details>
+<summary>⚠️ Compliance Gaps ({gaps_count} total: {len(critical_gaps)} Critical, {len(high_gaps)} High)</summary>
+
+"""
+                # Group by severity
+                for severity in ["CRITICAL", "HIGH", "MEDIUM", "LOW"]:
+                    severity_gaps = [g for g in gaps if g.get("severity") == severity]
+                    if severity_gaps:
+                        severity_emoji = {"CRITICAL": "🔴", "HIGH": "🟠", "MEDIUM": "🟡", "LOW": "🟢"}.get(severity, "⚪")
+                        output += f"\n**{severity_emoji} {severity} Priority Gaps:**\n\n"
+                        for gap in severity_gaps:
+                            output += f"- **{gap.get('category', 'Unknown')}**: {gap.get('description', 'No description')}\n"
+                            output += f"  - *Article:* {gap.get('articleReference', 'N/A')} | *Effort:* {gap.get('remediationEffort', 'N/A')}\n"
+                
+                output += "\n</details>\n\n"
+            
+            # Show top recommendations in collapsible section
+            if recommendations:
+                # Sort by priority
+                sorted_recs = sorted(recommendations, key=lambda r: r.get("priority", 10))
+                top_recs = sorted_recs[:5]
+                
+                output += f"""
+<details>
+<summary>💡 Priority Recommendations (Top {len(top_recs)} of {recs_count})</summary>
+
+"""
+                for i, rec in enumerate(top_recs, 1):
+                    output += f"\n**{i}. {rec.get('title', 'Recommendation')}** (Priority: {rec.get('priority', 'N/A')}/10)\n\n"
+                    output += f"{rec.get('description', 'No description')}\n\n"
+                    output += f"- *Article:* {rec.get('articleReference', 'N/A')}\n"
+                    output += f"- *Estimated Effort:* {rec.get('estimatedEffort', 'N/A')}\n"
+                    
+                    steps = rec.get("implementationSteps", [])
+                    if steps:
+                        output += f"- *Implementation Steps:*\n"
+                        for step in steps[:3]:  # Show first 3 steps
+                            output += f"  1. {step}\n"
+                        if len(steps) > 3:
+                            output += f"  *(+ {len(steps) - 3} more steps)*\n"
+                    output += "\n"
+                
+                output += "</details>\n\n"
+        
+        # Show generated documentation content in collapsible sections
+        output += "---\n\n### 📄 Generated EU AI Act Documentation\n\n"
+        
+        # Map of documentation keys to display info
+        doc_display_map = {
+            "riskManagementTemplate": {
+                "title": "Risk Management System",
+                "article": "Article 9",
+                "emoji": "⚡",
+                "description": "Continuous risk identification, analysis, estimation and mitigation process"
+            },
+            "technicalDocumentation": {
+                "title": "Technical Documentation",
+                "article": "Article 11 / Annex IV",
+                "emoji": "📋",
+                "description": "Comprehensive technical documentation for high-risk AI systems"
+            },
+            "conformityAssessment": {
+                "title": "Conformity Assessment",
+                "article": "Article 43",
+                "emoji": "✅",
+                "description": "Procedures for conformity assessment of high-risk AI systems"
+            },
+            "transparencyNotice": {
+                "title": "Transparency Notice",
+                "article": "Article 50",
+                "emoji": "👁️",
+                "description": "Transparency obligations for AI system interactions"
+            },
+            "qualityManagementSystem": {
+                "title": "Quality Management System",
+                "article": "Article 17",
+                "emoji": "🏆",
+                "description": "Quality management system for AI system providers"
+            },
+            "humanOversightProcedure": {
+                "title": "Human Oversight Procedure",
+                "article": "Article 14",
+                "emoji": "👤",
+                "description": "Human oversight measures for high-risk AI systems"
+            },
+            "dataGovernancePolicy": {
+                "title": "Data Governance Policy",
+                "article": "Article 10",
+                "emoji": "🗃️",
+                "description": "Data and data governance practices for training, validation and testing"
+            },
+            "incidentReportingProcedure": {
+                "title": "Incident Reporting Procedure",
+                "article": "Article 62",
+                "emoji": "🚨",
+                "description": "Reporting of serious incidents and malfunctioning"
+            },
+        }
+        
+        # Display each documentation template in its own collapsible section
+        docs_found = 0
+        for doc_key, doc_info in doc_display_map.items():
+            doc_content = documentation.get(doc_key)
+            if doc_content:
+                docs_found += 1
+                output += f"""
+<details>
+<summary>{doc_info['emoji']} **{doc_info['title']}** — {doc_info['article']}</summary>
+
+*{doc_info['description']}*
+
+---
+
+{doc_content}
+
+</details>
+
+"""
+        
+        if docs_found == 0:
+            output += "*No documentation templates were generated in this assessment.*\n\n"
+        else:
+            output += f"\n> ✨ **{docs_found} documentation template(s) generated.** Expand each section above to view the full content.\n\n"
+            
+            # Note about limited templates for speed/cost optimization
+            if docs_found < 8:
+                output += "> ℹ️ **Note:** Currently generating **2 core templates** (Risk Management & Technical Documentation) for faster responses and API cost optimization. Additional templates (Conformity Assessment, Transparency Notice, etc.) are planned for future releases.\n\n"
+        
+        # Show file paths if documents were saved to disk
+        if doc_files:
+            output += "---\n\n### 💾 Saved Documentation Files\n\n"
+            output += "The documentation has also been saved to disk:\n\n"
+            
+            # Map filenames to EU AI Act articles for context
+            article_map = {
+                "Risk_Management_System": "Article 9",
+                "Technical_Documentation": "Article 11 / Annex IV",
+                "Conformity_Assessment": "Article 43",
+                "Transparency_Notice": "Article 50",
+                "Quality_Management_System": "Article 17",
+                "Human_Oversight_Procedure": "Article 14",
+                "Data_Governance_Policy": "Article 10",
+                "Incident_Reporting_Procedure": "Article 62",
+                "Compliance_Assessment_Report": "Full Assessment",
+            }
+            
+            output += "| Document | EU AI Act Reference | File Path |\n"
+            output += "|----------|--------------------|-----------|\n"
+            
+            for file_path in doc_files:
+                # Extract filename from path
+                filename = file_path.split("/")[-1] if "/" in file_path else file_path
+                # Remove .md extension for display name
+                display_name = filename.replace(".md", "").replace("_", " ")
+                # Remove leading numbers like "01_" or "00_"
+                if len(display_name) > 3 and display_name[:2].isdigit() and display_name[2] == " ":
+                    display_name = display_name[3:]
+                
+                # Find article reference
+                article_ref = "—"
+                for key, article in article_map.items():
+                    if key.lower().replace("_", " ") in display_name.lower():
+                        article_ref = article
+                        break
+                
+                output += f"| 📄 {display_name} | {article_ref} | `{filename}` |\n"
+            
+            # Show the directory where files are saved
+            if doc_files:
+                docs_dir = "/".join(doc_files[0].split("/")[:-1])
+                output += f"\n**📂 Documents Directory:** `{docs_dir}`\n\n"
+        
+        # Collapsible raw JSON for reference (at the very end)
+        result_str = json.dumps(result, indent=2) if result else "null"
+        if len(result_str) > 5000:
+            result_str = result_str[:5000] + "\n... (truncated)"
+        
+        output += f"""
+---
+
+<details>
+<summary>🔍 View Raw JSON Response</summary>
+
+```json
+{result_str}
+```
+
+</details>
+"""
+        return output
+    
+    # Default formatting for other tools
     result_str = json.dumps(result, indent=2) if result else "null"
     if len(result_str) > 1500:
         result_str = result_str[:1500] + "\n... (truncated)"
@@ -192,7 +461,8 @@ def chat_with_agent_streaming(message: str, history: list, initialized_history: 
     
     response = None
     bot_response = ""
-    tool_calls_content = ""
+    tool_calls_content = ""  # All tool calls, results, and thinking sections (in order)
+    current_thinking = ""  # Accumulate thinking text before tool calls
     
     try:
         # Convert original history to API format (handle both ChatMessage and dict)
@@ -227,6 +497,10 @@ def chat_with_agent_streaming(message: str, history: list, initialized_history: 
         for line in response.iter_lines():
             # Check for cancellation
             if cancel_token.is_cancelled():
+                # Include any accumulated thinking before cancellation
+                if current_thinking.strip():
+                    tool_calls_content += format_thinking_section(current_thinking)
+                
                 final_content = tool_calls_content + bot_response
                 if final_content:
                     final_content += "\n\n*— Execution stopped by user*"
@@ -245,51 +519,131 @@ def chat_with_agent_streaming(message: str, history: list, initialized_history: 
                         event_type = data.get("type")
                         print(f"[DEBUG] Event type: {event_type}, data: {str(data)[:100]}")
                         
-                        if event_type == "text":
+                        if event_type == "thinking":
+                            # Handle thinking/reasoning tokens from Claude or GPT
+                            # Show thinking at the END (bottom) where action is happening
+                            thinking_content = data.get("content", "")
+                            if thinking_content:
+                                current_thinking += thinking_content
+                                
+                                # Show thinking tokens in real-time AT THE BOTTOM
+                                # Tool calls first, then current thinking at the end
+                                live_thinking = f"\n\n🧠 **Model Thinking (live):**\n\n```\n{current_thinking}\n```"
+                                full_content = tool_calls_content + live_thinking
+                                
+                                new_history[-1] = ChatMessage(role="assistant", content=full_content)
+                                yield new_history
+                        
+                        elif event_type == "text":
                             # Append text chunk
-                            bot_response += data.get("content", "")
-                            # Update the last message (replaces loading indicator)
-                            new_history[-1] = ChatMessage(role="assistant", content=tool_calls_content + bot_response)
+                            text_content = data.get("content", "")
+                            text_phase = data.get("phase", "thinking")  # Server tells us the phase
+                            has_had_tools = data.get("hasHadToolCalls", False)
+                            
+                            # Determine if this is "thinking" text or final response based on server phase
+                            if text_phase == "thinking" or (not has_had_tools and not tool_calls_content):
+                                # This is thinking text (before tool calls or between them)
+                                current_thinking += text_content
+                                
+                                # Show thinking AT THE BOTTOM after tool calls
+                                if not tool_calls_content:
+                                    # Initial thinking - show with brain indicator
+                                    display_content = f"🧠 **AI is reasoning...**\n\n{current_thinking}"
+                                else:
+                                    # Thinking between tool calls - show at the end
+                                    display_content = tool_calls_content + f"\n\n🧠 *Reasoning:* {current_thinking}"
+                                
+                                new_history[-1] = ChatMessage(role="assistant", content=display_content)
+                            else:
+                                # This is "potential_response" - text after tool results
+                                # Could be final response OR thinking before another tool call
+                                # We accumulate it and will format appropriately when we know more
+                                current_thinking += text_content
+                                
+                                # Show as streaming response AT THE BOTTOM
+                                full_content = tool_calls_content + f"\n\n{current_thinking}"
+                                new_history[-1] = ChatMessage(role="assistant", content=full_content)
+                            
                             yield new_history
                             
                         elif event_type == "tool_call":
-                            # Show tool call with prominent loading indicator
+                            # Before showing tool call, save any accumulated thinking as collapsible
                             tool_name = data.get("toolName", "unknown")
                             args = data.get("args", {})
+                            
+                            # If we have accumulated thinking text, add it as collapsible BEFORE this tool call
+                            if current_thinking.strip():
+                                tool_calls_content += format_thinking_section(current_thinking, tool_name)
+                                current_thinking = ""  # Reset for next thinking block
+                            else:
+                                # No thinking text was output - add a synthetic thinking note
+                                tool_display = tool_name.replace('_', ' ').title()
+                                synthetic_thinking = f"I'll use the **{tool_display}** tool to gather the necessary information."
+                                tool_calls_content += format_thinking_section(synthetic_thinking, tool_name)
+                            
+                            # Show tool call with prominent loading indicator AT THE BOTTOM
                             tool_calls_content += format_tool_call(tool_name, args)
                             # Add prominent loading indicator specific to this tool
                             loading_indicator = format_thinking_indicator(tool_name)
-                            new_history[-1] = ChatMessage(role="assistant", content=tool_calls_content + bot_response + loading_indicator)
+                            full_content = tool_calls_content + bot_response + loading_indicator
+                            new_history[-1] = ChatMessage(role="assistant", content=full_content)
                             yield new_history
                             current_tool_call = tool_name
-                            
-                            # Keep showing loading state periodically (in case tool takes long)
-                            # The indicator will be replaced when tool_result arrives
                             
                         elif event_type == "tool_result":
                             # Show tool result (removes loading indicator)
                             tool_name = data.get("toolName", current_tool_call or "unknown")
                             result = data.get("result")
                             tool_calls_content += format_tool_result(tool_name, result)
-                            # Remove loading indicator when result arrives
-                            new_history[-1] = ChatMessage(role="assistant", content=tool_calls_content + bot_response)
+                            
+                            # After tool result, show "analyzing results" indicator AT THE BOTTOM
+                            analyzing_indicator = f"\n\n🧠 **Analyzing {tool_name.replace('_', ' ')} results...**\n"
+                            full_content = tool_calls_content + analyzing_indicator
+                            new_history[-1] = ChatMessage(role="assistant", content=full_content)
                             yield new_history
                             current_tool_call = None
                             
                         elif event_type == "step_finish":
-                            # Step completed, remove thinking indicator
-                            new_history[-1] = ChatMessage(role="assistant", content=tool_calls_content + bot_response)
+                            # Step completed - if there's accumulated thinking, add it to tool_calls_content
+                            has_had_tools_in_step = data.get("hasHadToolCalls", False)
+                            
+                            if current_thinking.strip():
+                                tool_calls_content += format_thinking_section(current_thinking)
+                                current_thinking = ""
+                            
+                            # Show "preparing response" if we had tool calls and step is finishing AT THE BOTTOM
+                            if has_had_tools_in_step and tool_calls_content:
+                                preparing_indicator = "\n\n✨ **Preparing comprehensive response based on analysis...**\n"
+                                full_content = tool_calls_content + preparing_indicator
+                            else:
+                                full_content = tool_calls_content + bot_response
+                            
+                            new_history[-1] = ChatMessage(role="assistant", content=full_content)
                             yield new_history
                             
                         elif event_type == "error":
                             error_msg = data.get("error", "Unknown error")
                             bot_response += f"\n\n⚠️ Error: {error_msg}"
-                            new_history[-1] = ChatMessage(role="assistant", content=tool_calls_content + bot_response)
+                            full_content = tool_calls_content + bot_response
+                            new_history[-1] = ChatMessage(role="assistant", content=full_content)
                             yield new_history
                             
                         elif event_type == "done":
                             # Final update
-                            new_history[-1] = ChatMessage(role="assistant", content=tool_calls_content + bot_response)
+                            # If we have tool calls, any remaining current_thinking is the final response
+                            # If no tool calls, current_thinking was just direct response (no tools needed)
+                            if tool_calls_content:
+                                # We had tool calls - current_thinking after last tool is the final response
+                                bot_response = current_thinking
+                                current_thinking = ""
+                            else:
+                                # No tool calls - current_thinking is the direct response
+                                bot_response = current_thinking
+                                current_thinking = ""
+                            
+                            # Final response AT THE BOTTOM after all tool calls
+                            full_content = tool_calls_content + bot_response
+                            new_history[-1] = ChatMessage(role="assistant", content=full_content)
                             yield new_history
                             break
                             
@@ -298,6 +652,11 @@ def chat_with_agent_streaming(message: str, history: list, initialized_history: 
         
         # Ensure final state (only if not cancelled)
         if not cancel_token.is_cancelled():
+            # If we have accumulated text that wasn't finalized, treat it as the response
+            if current_thinking.strip() and not bot_response:
+                bot_response = current_thinking
+            
+            # Final content: tool calls first, then response at the bottom
             final_content = tool_calls_content + (bot_response or "No response generated.")
             new_history[-1] = ChatMessage(role="assistant", content=final_content)
             yield new_history
@@ -317,12 +676,14 @@ def chat_with_agent_streaming(message: str, history: list, initialized_history: 
         # This can happen when we close the connection during cancellation - it's expected
         if not cancel_token.is_cancelled():
             error_msg = "⚠️ Connection was interrupted."
-            new_history[-1] = ChatMessage(role="assistant", content=tool_calls_content + bot_response + "\n\n" + error_msg)
+            final_content = tool_calls_content + bot_response + "\n\n" + error_msg
+            new_history[-1] = ChatMessage(role="assistant", content=final_content)
             yield new_history
     except Exception as e:
         if not cancel_token.is_cancelled():
             error_msg = f"⚠️ Error: {str(e)}"
-            new_history[-1] = ChatMessage(role="assistant", content=error_msg)
+            final_content = tool_calls_content + bot_response + "\n\n" + error_msg if (tool_calls_content or bot_response) else error_msg
+            new_history[-1] = ChatMessage(role="assistant", content=final_content)
             yield new_history
     finally:
         # Clean up the response connection
@@ -389,7 +750,7 @@ with gr.Blocks(
     title="🇪🇺 EU AI Act Compliance Agent",
 ) as demo:
     
-    # Custom CSS to hide Gradio footer and style stop button
+    # Custom CSS and JavaScript to handle scroll behavior and styling
     gr.HTML("""
     <style>
     /* Hide Gradio's default footer */
@@ -407,7 +768,204 @@ with gr.Blocks(
         background-color: #c82333 !important;
         border-color: #bd2130 !important;
     }
+    
+    /* Scroll indicator when user has scrolled up */
+    .scroll-indicator {
+        position: absolute;
+        bottom: 10px;
+        right: 20px;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-size: 12px;
+        cursor: pointer;
+        z-index: 1000;
+        display: none;
+    }
+    .scroll-indicator:hover {
+        background: rgba(0, 0, 0, 0.9);
+    }
     </style>
+    
+    <script>
+    // Disable Gradio's auto-scroll when user manually scrolls
+    (function() {
+        let userHasScrolled = false;
+        let chatContainer = null;
+        let scrollIndicator = null;
+        let isStreaming = false;
+        
+        function findChatContainer() {
+            // Find the chat messages container (Gradio uses different selectors)
+            const selectors = [
+                '.chatbot .messages-wrapper',
+                '.chatbot [data-testid="bot"]',
+                '.chatbot .overflow-y-auto',
+                '[data-testid="chatbot"] > div',
+                '.chatbot'
+            ];
+            
+            for (const selector of selectors) {
+                const el = document.querySelector(selector);
+                if (el && el.scrollHeight > el.clientHeight) {
+                    return el;
+                }
+            }
+            
+            // Fallback: find any scrollable element in chatbot
+            const chatbot = document.querySelector('.chatbot');
+            if (chatbot) {
+                const scrollable = chatbot.querySelector('[style*="overflow"]') || 
+                                   chatbot.querySelector('.overflow-y-auto') ||
+                                   Array.from(chatbot.querySelectorAll('*')).find(el => 
+                                       el.scrollHeight > el.clientHeight && 
+                                       getComputedStyle(el).overflowY !== 'visible'
+                                   );
+                return scrollable || chatbot;
+            }
+            return null;
+        }
+        
+        function isNearBottom(container) {
+            if (!container) return true;
+            const threshold = 100; // pixels from bottom
+            return container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+        }
+        
+        function scrollToBottom(container) {
+            if (container) {
+                container.scrollTop = container.scrollHeight;
+            }
+        }
+        
+        function createScrollIndicator(container) {
+            if (scrollIndicator) return scrollIndicator;
+            
+            scrollIndicator = document.createElement('div');
+            scrollIndicator.className = 'scroll-indicator';
+            scrollIndicator.innerHTML = '⬇️ New content below - click to scroll';
+            scrollIndicator.onclick = function() {
+                userHasScrolled = false;
+                scrollToBottom(container);
+                scrollIndicator.style.display = 'none';
+            };
+            
+            // Position relative to chat container
+            const chatbot = document.querySelector('.chatbot');
+            if (chatbot) {
+                chatbot.style.position = 'relative';
+                chatbot.appendChild(scrollIndicator);
+            }
+            
+            return scrollIndicator;
+        }
+        
+        function handleScroll(e) {
+            const container = e.target;
+            
+            // If user scrolls up (not near bottom), mark as user-scrolled
+            if (!isNearBottom(container)) {
+                userHasScrolled = true;
+                if (scrollIndicator && isStreaming) {
+                    scrollIndicator.style.display = 'block';
+                }
+            } else {
+                // User scrolled back to bottom
+                userHasScrolled = false;
+                if (scrollIndicator) {
+                    scrollIndicator.style.display = 'none';
+                }
+            }
+        }
+        
+        function setupScrollHandling() {
+            chatContainer = findChatContainer();
+            if (!chatContainer) {
+                // Retry after a short delay if container not found yet
+                setTimeout(setupScrollHandling, 500);
+                return;
+            }
+            
+            // Remove any existing listeners
+            chatContainer.removeEventListener('scroll', handleScroll);
+            
+            // Add scroll listener
+            chatContainer.addEventListener('scroll', handleScroll, { passive: true });
+            
+            // Create scroll indicator
+            createScrollIndicator(chatContainer);
+            
+            // Override Gradio's auto-scroll behavior using MutationObserver
+            const observer = new MutationObserver(function(mutations) {
+                // Content changed - this is likely streaming
+                isStreaming = true;
+                
+                // Only auto-scroll if user hasn't manually scrolled
+                if (!userHasScrolled) {
+                    scrollToBottom(chatContainer);
+                } else if (scrollIndicator) {
+                    scrollIndicator.style.display = 'block';
+                }
+            });
+            
+            observer.observe(chatContainer, {
+                childList: true,
+                subtree: true,
+                characterData: true
+            });
+            
+            console.log('[Scroll] Auto-scroll handler initialized');
+        }
+        
+        // Reset scroll state when a new message is sent
+        function resetScrollState() {
+            userHasScrolled = false;
+            isStreaming = true;
+            if (scrollIndicator) {
+                scrollIndicator.style.display = 'none';
+            }
+        }
+        
+        // Listen for form submissions to reset scroll state
+        document.addEventListener('click', function(e) {
+            if (e.target.matches('button[type="submit"], button.primary')) {
+                resetScrollState();
+            }
+        });
+        
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                const activeEl = document.activeElement;
+                if (activeEl && activeEl.tagName === 'TEXTAREA') {
+                    resetScrollState();
+                }
+            }
+        });
+        
+        // Mark streaming as complete when stop button is clicked or response ends
+        document.addEventListener('click', function(e) {
+            if (e.target.matches('button.stop, button[variant="stop"]')) {
+                isStreaming = false;
+                if (scrollIndicator) {
+                    scrollIndicator.style.display = 'none';
+                }
+            }
+        });
+        
+        // Initialize when DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', setupScrollHandling);
+        } else {
+            setupScrollHandling();
+        }
+        
+        // Re-initialize on Gradio component updates
+        window.addEventListener('load', function() {
+            setTimeout(setupScrollHandling, 1000);
+        });
+    })();
+    </script>
     """)
     
     # Header
@@ -427,6 +985,7 @@ with gr.Blocks(
                 label="Chat with EU AI Act Expert",
                 height=550,
                 show_label=True,
+                autoscroll=False,  # Disable auto-scroll - we handle it with JS
             )
             
             with gr.Row():

@@ -29,7 +29,6 @@ rsync -av --exclude='node_modules' --exclude='.git' --exclude='dist' --exclude='
 cd "$TEMP_DIR"
 
 # Move Space files to root (from apps/eu-ai-act-agent)
-cp apps/eu-ai-act-agent/README_HF.md ./README.md
 cp apps/eu-ai-act-agent/Dockerfile ./
 
 # Remove git and push to HF

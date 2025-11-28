@@ -48,7 +48,7 @@ Based on EU AI Act Articles 16 (Provider Obligations), 22 (Authorized Representa
     context: z.string().optional().describe("Additional context about the organization (optional)"),
   }),
 
-  execute: async ({ organizationName, domain, context }) => {
+  execute: async ({ organizationName, domain, context }: { organizationName: string; domain?: string; context?: string }) => {
     try {
       const result = await discoverOrganization({
         organizationName,
@@ -87,10 +87,36 @@ Generates reports for systems requiring immediate attention with EU database reg
     context: z.string().optional().describe("Additional context about the systems (optional)"),
   }),
 
-  execute: async ({ organizationName, systemNames, scope, context }) => {
+  execute: async ({ organizationName, systemNames, scope, context }: { organizationName?: string; systemNames?: string[]; scope?: string; context?: string }) => {
     try {
+      // Import the type to properly construct the organization context
       const result = await discoverAIServices({
-        organizationContext: organizationName ? { name: organizationName } : undefined,
+        organizationContext: organizationName ? {
+          organization: {
+            name: organizationName,
+            sector: "Unknown",
+            size: "SME",
+            jurisdiction: ["Unknown"],
+            euPresence: false,
+            headquarters: { country: "Unknown", city: "Unknown" },
+            contact: { email: "unknown@example.com" },
+            aiMaturityLevel: "Developing",
+            primaryRole: "Provider",
+          },
+          regulatoryContext: {
+            applicableFrameworks: ["EU AI Act"],
+            complianceDeadlines: [],
+            existingCertifications: [],
+            hasQualityManagementSystem: false,
+            hasRiskManagementSystem: false,
+          },
+          metadata: {
+            createdAt: new Date().toISOString(),
+            lastUpdated: new Date().toISOString(),
+            completenessScore: 0,
+            dataSource: "manual",
+          },
+        } : undefined,
         systemNames,
         scope,
         context,
@@ -137,11 +163,57 @@ Requires XAI_API_KEY environment variable to be set.`,
     generateDocumentation: z.boolean().optional().describe("Whether to generate documentation templates (default: true)"),
   }),
 
-  execute: async ({ organizationName, systemNames, focusAreas, generateDocumentation }) => {
+  execute: async ({ organizationName, systemNames, focusAreas, generateDocumentation }: { organizationName?: string; systemNames?: string[]; focusAreas?: string[]; generateDocumentation?: boolean }) => {
     try {
+      // Import the types to properly construct the contexts
       const result = await assessCompliance({
-        organizationContext: organizationName ? { name: organizationName } : undefined,
-        aiServicesContext: systemNames ? { systems: systemNames } : undefined,
+        organizationContext: organizationName ? {
+          organization: {
+            name: organizationName,
+            sector: "Unknown",
+            size: "SME",
+            jurisdiction: ["Unknown"],
+            euPresence: false,
+            headquarters: { country: "Unknown", city: "Unknown" },
+            contact: { email: "unknown@example.com" },
+            aiMaturityLevel: "Developing",
+            primaryRole: "Provider",
+          },
+          regulatoryContext: {
+            applicableFrameworks: ["EU AI Act"],
+            complianceDeadlines: [],
+            existingCertifications: [],
+            hasQualityManagementSystem: false,
+            hasRiskManagementSystem: false,
+          },
+          metadata: {
+            createdAt: new Date().toISOString(),
+            lastUpdated: new Date().toISOString(),
+            completenessScore: 0,
+            dataSource: "manual",
+          },
+        } : undefined,
+        aiServicesContext: systemNames ? {
+          systems: [],
+          riskSummary: {
+            unacceptableRiskCount: 0,
+            highRiskCount: 0,
+            limitedRiskCount: 0,
+            minimalRiskCount: 0,
+            totalCount: 0,
+          },
+          complianceSummary: {
+            fullyCompliantCount: 0,
+            partiallyCompliantCount: 0,
+            nonCompliantCount: 0,
+            requiresAttention: [],
+          },
+          discoveryMetadata: {
+            timestamp: new Date().toISOString(),
+            method: "manual",
+            coverage: "partial",
+          },
+        } : undefined,
         focusAreas,
         generateDocumentation,
       });

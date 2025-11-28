@@ -536,31 +536,46 @@ export interface Recommendation {
 /**
  * Compliance Documentation Templates
  * Markdown templates for various EU AI Act documentation requirements
+ * 
+ * ⚠️ CURRENT IMPLEMENTATION NOTE:
+ * Only 2 templates are currently generated for API cost and speed optimization:
+ * - ✅ riskManagementTemplate (Article 9)
+ * - ✅ technicalDocumentation (Article 11 / Annex IV)
+ * 
+ * The remaining 6 templates are planned but NOT YET IMPLEMENTED:
+ * - 🔜 conformityAssessment (Article 43)
+ * - 🔜 transparencyNotice (Article 50)
+ * - 🔜 qualityManagementSystem (Article 17)
+ * - 🔜 humanOversightProcedure (Article 14)
+ * - 🔜 dataGovernancePolicy (Article 10)
+ * - 🔜 incidentReportingProcedure (Article 62)
  */
 export interface ComplianceDocumentation {
-  /** Risk Management System template (Article 9) */
+  /** ✅ IMPLEMENTED: Risk Management System template (Article 9) */
   riskManagementTemplate?: string;
   
-  /** Technical Documentation template (Article 11, Annex IV) */
+  /** ✅ IMPLEMENTED: Technical Documentation template (Article 11, Annex IV) */
   technicalDocumentation?: string;
   
-  /** Conformity Assessment template (Article 43) */
-  conformityAssessment?: string;
+  // ----- PLANNED BUT NOT YET IMPLEMENTED (for speed & cost optimization) -----
   
-  /** Transparency Notice template (Article 50) */
-  transparencyNotice?: string;
+  // /** 🔜 PLANNED: Conformity Assessment template (Article 43) */
+  // conformityAssessment?: string;
   
-  /** Quality Management System template (Article 17) */
-  qualityManagementSystem?: string;
+  // /** 🔜 PLANNED: Transparency Notice template (Article 50) */
+  // transparencyNotice?: string;
   
-  /** Human Oversight Procedure template (Article 14) */
-  humanOversightProcedure?: string;
+  // /** 🔜 PLANNED: Quality Management System template (Article 17) */
+  // qualityManagementSystem?: string;
   
-  /** Data Governance Policy template (Article 10) */
-  dataGovernancePolicy?: string;
+  // /** 🔜 PLANNED: Human Oversight Procedure template (Article 14) */
+  // humanOversightProcedure?: string;
   
-  /** Incident Reporting Procedure template */
-  incidentReportingProcedure?: string;
+  // /** 🔜 PLANNED: Data Governance Policy template (Article 10) */
+  // dataGovernancePolicy?: string;
+  
+  // /** 🔜 PLANNED: Incident Reporting Procedure template (Article 62) */
+  // incidentReportingProcedure?: string;
 }
 
 /**

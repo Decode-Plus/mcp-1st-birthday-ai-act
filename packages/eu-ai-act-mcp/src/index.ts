@@ -67,19 +67,23 @@ The tool automatically discovers the company domain from web research if not pro
 Based on EU AI Act Articles 16 (Provider Obligations), 22 (Authorized Representatives), and 49 (Registration Requirements).`,
     inputSchema: z.object({
       organizationName: z.string().describe("Name of the organization to discover (required)"),
-      domain: z.string().optional().describe("Organization's domain (e.g., 'ibm.com'). Auto-discovered if not provided."),
-      context: z.string().optional().describe("Additional context about the organization"),
+      domain: z.string().optional().nullable().describe("Organization's domain (e.g., 'ibm.com'). Auto-discovered if not provided."),
+      context: z.string().optional().nullable().describe("Additional context about the organization"),
     }),
   },
-  async ({ organizationName, domain, context }: { organizationName: string; domain?: string; context?: string }) => {
-    console.error(`[discover_organization] Called with: organizationName="${organizationName}", domain="${domain}", context="${context}"`);
+  async ({ organizationName, domain, context }: { organizationName: string; domain?: string | null; context?: string | null }) => {
+    // Convert null values to undefined
+    const cleanDomain = domain ?? undefined;
+    const cleanContext = context ?? undefined;
+    
+    console.error(`[discover_organization] Called with: organizationName="${organizationName}", domain="${cleanDomain}", context="${cleanContext}"`);
     
     try {
     // Execute tool
     const result = await discoverOrganization({
       organizationName,
-      domain,
-      context,
+      domain: cleanDomain,
+      context: cleanContext,
     });
     
     console.error(`[discover_organization] Completed, result has ${JSON.stringify(result).length} chars`);
@@ -126,22 +130,28 @@ This tool scans for AI systems and provides comprehensive compliance analysis:
 
 Generates reports for systems requiring immediate attention with EU database registration obligations (Article 49, Annex VIII).`,
     inputSchema: z.object({
-      organizationContext: z.any().optional().describe("Organization profile from discover_organization tool (optional but recommended)"),
-      systemNames: z.array(z.string()).optional().describe("Specific AI system names to discover (optional, scans all if not provided)"),
-      scope: z.string().optional().describe("Scope of discovery: 'all' (default), 'high-risk-only', 'production-only'"),
-      context: z.string().optional().describe("Additional context about the systems"),
+      organizationContext: z.any().optional().nullable().describe("Organization profile from discover_organization tool (optional but recommended)"),
+      systemNames: z.array(z.string()).optional().nullable().describe("Specific AI system names to discover (optional, scans all if not provided)"),
+      scope: z.string().optional().nullable().describe("Scope of discovery: 'all' (default), 'high-risk-only', 'production-only'"),
+      context: z.string().optional().nullable().describe("Additional context about the systems"),
     }),
   },
-  async ({ organizationContext, systemNames, scope, context }: { organizationContext?: any; systemNames?: string[]; scope?: string; context?: string }) => {
-    console.error(`[discover_ai_services] Called with: systemNames=${JSON.stringify(systemNames)}, scope="${scope}"`);
+  async ({ organizationContext, systemNames, scope, context }: { organizationContext?: any; systemNames?: string[] | null; scope?: string | null; context?: string | null }) => {
+    // Convert null values to undefined
+    const cleanOrgContext = organizationContext ?? undefined;
+    const cleanSystemNames = systemNames ?? undefined;
+    const cleanScope = scope ?? undefined;
+    const cleanContext = context ?? undefined;
+    
+    console.error(`[discover_ai_services] Called with: systemNames=${JSON.stringify(cleanSystemNames)}, scope="${cleanScope}"`);
     
     try {
     // Execute tool
     const result = await discoverAIServices({
-      organizationContext,
-      systemNames,
-      scope,
-      context,
+      organizationContext: cleanOrgContext,
+      systemNames: cleanSystemNames,
+      scope: cleanScope,
+      context: cleanContext,
     });
     
     console.error(`[discover_ai_services] Completed, found ${result.systems?.length || 0} systems`);
@@ -198,22 +208,28 @@ Uses xAI Grok-4 to analyze compliance status and generate professional documenta
 
 Requires XAI_API_KEY environment variable to be set.`,
     inputSchema: z.object({
-      organizationContext: z.any().optional().describe("Organization profile from discover_organization tool (optional)"),
-      aiServicesContext: z.any().optional().describe("AI services discovery results from discover_ai_services tool (optional)"),
-      focusAreas: z.array(z.string()).optional().describe("Specific compliance areas to focus on (optional)"),
-      generateDocumentation: z.boolean().optional().describe("Whether to generate documentation templates (default: true)"),
+      organizationContext: z.any().optional().nullable().describe("Organization profile from discover_organization tool (optional)"),
+      aiServicesContext: z.any().optional().nullable().describe("AI services discovery results from discover_ai_services tool (optional)"),
+      focusAreas: z.array(z.string()).optional().nullable().describe("Specific compliance areas to focus on (optional)"),
+      generateDocumentation: z.boolean().optional().nullable().describe("Whether to generate documentation templates (default: true)"),
     }),
   },
-  async ({ organizationContext, aiServicesContext, focusAreas, generateDocumentation }: { organizationContext?: any; aiServicesContext?: any; focusAreas?: string[]; generateDocumentation?: boolean }) => {
-    console.error(`[assess_compliance] Called with: focusAreas=${JSON.stringify(focusAreas)}, generateDocumentation=${generateDocumentation}`);
+  async ({ organizationContext, aiServicesContext, focusAreas, generateDocumentation }: { organizationContext?: any; aiServicesContext?: any; focusAreas?: string[] | null; generateDocumentation?: boolean | null }) => {
+    // Convert null values to undefined for downstream functions
+    const cleanFocusAreas = focusAreas ?? undefined;
+    const cleanGenerateDocumentation = generateDocumentation ?? undefined;
+    const cleanOrgContext = organizationContext ?? undefined;
+    const cleanAiServicesContext = aiServicesContext ?? undefined;
+    
+    console.error(`[assess_compliance] Called with: focusAreas=${JSON.stringify(cleanFocusAreas)}, generateDocumentation=${cleanGenerateDocumentation}`);
     
     try {
     // Execute tool
     const result = await assessCompliance({
-      organizationContext,
-      aiServicesContext,
-      focusAreas,
-      generateDocumentation,
+      organizationContext: cleanOrgContext,
+      aiServicesContext: cleanAiServicesContext,
+      focusAreas: cleanFocusAreas,
+      generateDocumentation: cleanGenerateDocumentation,
     });
     
     console.error(`[assess_compliance] Completed, score: ${result.assessment?.overallScore || 'N/A'}`);

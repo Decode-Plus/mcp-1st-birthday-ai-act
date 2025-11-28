@@ -215,14 +215,22 @@ Takes organization and service context to produce:
     recommendations: Recommendation[];
   },
   documentation: {
-    riskManagementTemplate: string;
-    technicalDocumentation: string;
-    conformityAssessment: string;
-    transparencyNotice: string;
+    // ✅ Currently generated:
+    riskManagementTemplate: string;   // Article 9
+    technicalDocumentation: string;   // Article 11 / Annex IV
+    // 🔜 Planned (not yet implemented):
+    // conformityAssessment: string;
+    // transparencyNotice: string;
+    // qualityManagementSystem: string;
+    // humanOversightProcedure: string;
+    // dataGovernancePolicy: string;
+    // incidentReportingProcedure: string;
   },
   reasoning: string; // Chain-of-thought explanation
 }
 ```
+
+> ⚠️ **Documentation Generation Note:** Currently generates **2 templates** (Risk Management & Technical Documentation) for API cost and speed optimization. Additional templates planned for future releases.
 
 ### 🔗 MCP Integration
 
@@ -554,13 +562,6 @@ This project is our entry to the **[MCP 1st Birthday Hackathon](https://huggingf
   </tr>
 </table>
 
----
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
 
 <div align="center">
 

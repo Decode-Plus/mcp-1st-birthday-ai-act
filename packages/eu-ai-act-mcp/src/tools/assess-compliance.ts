@@ -29,7 +29,7 @@
 import { xai } from "@ai-sdk/xai";
 import { openai } from "@ai-sdk/openai";
 import { anthropic } from "@ai-sdk/anthropic";
-import { generateText } from "ai";
+import { streamText } from "ai";
 import { writeFile, mkdir } from "fs/promises";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -81,6 +81,8 @@ function getModel() {
 
 /**
  * EU AI Act Knowledge Base for AI context
+ * Based on Regulation (EU) 2024/1689 - Official Journal L 2024/1689, 12.7.2024
+ * Source: https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=OJ:L_202401689
  */
 const EU_AI_ACT_CONTEXT = `
 You are an expert EU AI Act compliance consultant. You have deep knowledge of:
@@ -89,9 +91,34 @@ You are an expert EU AI Act compliance consultant. You have deep knowledge of:
 
 **Risk Classification (Article 6, Annex III):**
 - Unacceptable Risk (Article 5): Prohibited AI practices including social scoring, manipulation, exploitation
-- High-Risk (Annex III): Employment, education, credit, law enforcement, critical infrastructure, biometric
+- High-Risk (Annex III): Employment, education, credit, law enforcement, critical infrastructure, biometric, LEGAL/JUSTICE
 - Limited Risk (Article 50): Transparency obligations for chatbots, emotion recognition, deepfakes
 - Minimal Risk: General purpose AI with no specific obligations
+
+**ANNEX III - HIGH-RISK AI SYSTEMS (Complete List):**
+1. Biometrics (remote biometric identification, categorisation)
+2. Critical infrastructure (safety components in water, gas, electricity, transport)
+3. Education and vocational training (determining access, evaluating learning outcomes)
+4. Employment and workers management (recruitment, task allocation, termination decisions)
+5. Access to essential services (credit scoring, emergency services, health/life insurance)
+6. Law enforcement (risk assessment, polygraphs, evidence reliability, profiling)
+7. Migration, asylum, border control (polygraphs, risk assessment, verification of documents)
+8. **Administration of justice and democratic processes:**
+   - **Point 8(a): AI systems intended to assist a judicial authority in researching and interpreting facts and the law and in applying the law to a concrete set of facts, or to be used in a similar way in alternative dispute resolution**
+   - Point 8(b): AI systems intended to influence the outcome of an election or referendum
+
+**CRITICAL: Legal AI Systems Classification (Annex III, Point 8(a)):**
+ANY AI system that provides:
+- Legal advice or legal consulting
+- Legal research assistance
+- Legal document analysis or generation
+- Contract review or analysis
+- Legal case analysis
+- Interpretation of laws or regulations
+- Legal risk assessment
+- Alternative dispute resolution assistance
+- Compliance advice or guidance
+Must be classified as HIGH RISK per Annex III, Point 8(a).
 
 **High-Risk System Requirements (Articles 8-15):**
 1. Article 9: Risk Management System - continuous process for identifying, analyzing, mitigating risks
@@ -124,6 +151,7 @@ When analyzing compliance, always:
 3. Prioritize gaps by severity (CRITICAL, HIGH, MEDIUM, LOW)
 4. Generate documentation templates in markdown format
 5. Calculate realistic compliance scores
+6. ALWAYS classify legal/judicial AI systems as HIGH RISK per Annex III Point 8(a)
 `;
 
 /**
@@ -259,12 +287,6 @@ function generateDocumentationPrompt(
 {
   "riskManagementTemplate": "<markdown template for Article 9 Risk Management System>",
   "technicalDocumentation": "<markdown template for Article 11 / Annex IV Technical Documentation>",
-  "conformityAssessment": "<markdown template for Article 43 Conformity Assessment>",
-  "transparencyNotice": "<markdown template for Article 50 Transparency Notice>",
-  "qualityManagementSystem": "<markdown template for Article 17 Quality Management System>",
-  "humanOversightProcedure": "<markdown template for Article 14 Human Oversight>",
-  "dataGovernancePolicy": "<markdown template for Article 10 Data Governance>",
-  "incidentReportingProcedure": "<markdown template for incident reporting>"
 }
 
 Generate comprehensive, professional documentation templates that:
@@ -275,6 +297,204 @@ Generate comprehensive, professional documentation templates that:
 5. Include checklists where appropriate`;
 
   return prompt;
+}
+
+/**
+ * HIGH-RISK KEYWORDS based on EU AI Act Annex III
+ * Source: https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=OJ:L_202401689
+ */
+const HIGH_RISK_KEYWORDS = [
+  // Annex III Point 8(a) - Administration of justice (LEGAL AI)
+  "legal", "law", "lawyer", "attorney", "judicial", "justice", "court",
+  "litigation", "contract", "compliance", "regulatory", "statute",
+  "legal advice", "legal consulting", "legal assistant", "legal research",
+  "dispute resolution", "arbitration", "mediation",
+  // Annex III Point 4 - Employment
+  "recruitment", "hiring", "hr", "human resources", "employee", "workforce",
+  "resume", "cv", "candidate", "job application", "termination",
+  // Annex III Point 5 - Essential services
+  "credit", "scoring", "loan", "insurance", "financial risk",
+  "creditworthiness", "emergency services",
+  // Annex III Point 1 - Biometrics  
+  "biometric", "facial recognition", "face recognition", "fingerprint",
+  "identity verification", "remote identification",
+  // Annex III Point 3 - Education
+  "education", "student", "academic", "exam", "grading", "admission",
+  // Annex III Point 6 - Law enforcement
+  "law enforcement", "police", "crime", "profiling", "polygraph",
+  // Annex III Point 2 - Critical infrastructure
+  "critical infrastructure", "safety component", "water supply",
+  "gas supply", "electricity", "transport",
+  // Annex III Point 5(b) - Healthcare
+  "healthcare", "medical", "diagnosis", "clinical", "patient", "health",
+];
+
+/**
+ * Validate and fix risk classification consistency
+ * Ensures that category, annexIIICategory, riskScore, and conformityAssessment are aligned
+ * 
+ * Rules per EU AI Act (Regulation (EU) 2024/1689):
+ * - If annexIIICategory mentions "Annex III" or "High-Risk", category must be "High"
+ * - If system involves legal/judicial AI (Annex III Point 8(a)), category must be "High"
+ * - If riskScore >= 70, category should be "High"
+ * - If riskScore >= 40 and < 70, category should be "Limited" (unless already "High")
+ * - If conformityAssessmentRequired is true, category should be "High"
+ * - "Unacceptable" overrides all other categories
+ */
+function validateRiskClassification(riskClassification: any, systemContext?: { name?: string; description?: string; intendedPurpose?: string }): any {
+  if (!riskClassification) return riskClassification;
+  
+  const rc = { ...riskClassification };
+  const annexIII = (rc.annexIIICategory || "").toLowerCase();
+  const justification = (rc.justification || "").toLowerCase();
+  
+  // Build context string for keyword matching
+  const contextString = [
+    systemContext?.name || "",
+    systemContext?.description || "",
+    systemContext?.intendedPurpose || "",
+    annexIII,
+    justification,
+  ].join(" ").toLowerCase();
+  
+  // Check for high-risk keywords from Annex III categories
+  const matchedHighRiskKeywords = HIGH_RISK_KEYWORDS.filter(keyword => 
+    contextString.includes(keyword.toLowerCase())
+  );
+  const hasHighRiskKeywords = matchedHighRiskKeywords.length > 0;
+  
+  // Special check for legal AI systems (Annex III Point 8(a))
+  const isLegalAI = contextString.includes("legal") || 
+                    contextString.includes("law") ||
+                    contextString.includes("lawyer") ||
+                    contextString.includes("attorney") ||
+                    contextString.includes("judicial") ||
+                    contextString.includes("justice") ||
+                    contextString.includes("court") ||
+                    contextString.includes("litigation") ||
+                    contextString.includes("contract review") ||
+                    contextString.includes("compliance advi") ||
+                    contextString.includes("regulatory") ||
+                    contextString.includes("dispute resolution");
+  
+  // Check for indicators of high-risk classification
+  const hasAnnexIIIIndicator = 
+    annexIII.includes("annex iii") || 
+    annexIII.includes("annex-iii") ||
+    annexIII.includes("high-risk") ||
+    annexIII.includes("high risk");
+  
+  const hasHighRiskJustification =
+    justification.includes("high-risk") ||
+    justification.includes("high risk") ||
+    justification.includes("annex iii");
+  
+  const hasHighRiskScore = rc.riskScore >= 70;
+  const hasMediumRiskScore = rc.riskScore >= 40 && rc.riskScore < 70;
+  const requiresConformity = rc.conformityAssessmentRequired === true;
+  
+  // Check for unacceptable risk indicators
+  const hasUnacceptableIndicator =
+    annexIII.includes("article 5") ||
+    annexIII.includes("prohibited") ||
+    annexIII.includes("unacceptable") ||
+    justification.includes("prohibited") ||
+    justification.includes("unacceptable") ||
+    contextString.includes("social scoring") ||
+    contextString.includes("manipulation");
+  
+  // Determine the correct category based on all indicators
+  let correctedCategory = rc.category;
+  let correctionReason = "";
+  
+  if (hasUnacceptableIndicator) {
+    correctedCategory = "Unacceptable";
+    correctionReason = "Unacceptable risk indicators (Article 5)";
+  } else if (isLegalAI) {
+    correctedCategory = "High";
+    correctionReason = "Legal AI system per Annex III Point 8(a) - Administration of justice";
+    // Update annexIIICategory to reflect correct classification
+    rc.annexIIICategory = "Annex III, Point 8(a) - Administration of justice and democratic processes";
+    rc.justification = "AI system intended to assist with legal matters, interpreting law, or applying law to facts. Per EU AI Act Annex III Point 8(a), such systems are classified as HIGH RISK.";
+    rc.riskScore = Math.max(rc.riskScore || 0, 85);
+  } else if (hasHighRiskKeywords) {
+    correctedCategory = "High";
+    correctionReason = `High-risk keywords detected: ${matchedHighRiskKeywords.slice(0, 3).join(", ")}`;
+  } else if (hasAnnexIIIIndicator || hasHighRiskJustification || hasHighRiskScore || requiresConformity) {
+    correctedCategory = "High";
+    correctionReason = hasAnnexIIIIndicator ? `Annex III reference: "${rc.annexIIICategory}"` :
+                       hasHighRiskJustification ? "High-risk justification found" :
+                       hasHighRiskScore ? `Risk score: ${rc.riskScore} >= 70` :
+                       "Conformity assessment required";
+  } else if (hasMediumRiskScore && rc.category === "Minimal") {
+    correctedCategory = "Limited";
+    correctionReason = `Medium risk score: ${rc.riskScore}`;
+  }
+  
+  // If category was corrected, log the change
+  if (correctedCategory !== rc.category) {
+    console.error(`[Risk Validation] Corrected category from "${rc.category}" to "${correctedCategory}"`);
+    console.error(`  - Reason: ${correctionReason}`);
+    if (systemContext?.name) {
+      console.error(`  - System: ${systemContext.name}`);
+    }
+    
+    rc.category = correctedCategory;
+  }
+  
+  // Ensure conformity assessment fields are consistent with category
+  if (rc.category === "High" || rc.category === "Unacceptable") {
+    rc.conformityAssessmentRequired = true;
+    if (!rc.conformityAssessmentType || rc.conformityAssessmentType === "Not Required") {
+      rc.conformityAssessmentType = "Internal Control";
+    }
+    // Ensure minimum risk score for high-risk systems
+    if (rc.riskScore < 70) {
+      rc.riskScore = 75;
+    }
+  } else if (rc.category === "Minimal") {
+    rc.conformityAssessmentRequired = false;
+    rc.conformityAssessmentType = "Not Required";
+  }
+  
+  return rc;
+}
+
+/**
+ * Validate risk classifications for all systems in aiServicesContext
+ * Passes system context (name, description, purpose) to enable keyword-based classification
+ */
+function validateAIServicesContext(context: any): any {
+  if (!context || !context.systems) return context;
+  
+  const validatedSystems = context.systems.map((system: any) => {
+    // Extract system context for keyword matching
+    const systemContext = {
+      name: system.system?.name || system.name || "",
+      description: system.system?.description || system.description || "",
+      intendedPurpose: system.system?.intendedPurpose || system.intendedPurpose || "",
+    };
+    
+    return {
+      ...system,
+      riskClassification: validateRiskClassification(system.riskClassification, systemContext),
+    };
+  });
+  
+  // Recalculate risk summary based on validated categories
+  const riskSummary = {
+    unacceptableRiskCount: validatedSystems.filter((s: any) => s.riskClassification?.category === "Unacceptable").length,
+    highRiskCount: validatedSystems.filter((s: any) => s.riskClassification?.category === "High").length,
+    limitedRiskCount: validatedSystems.filter((s: any) => s.riskClassification?.category === "Limited").length,
+    minimalRiskCount: validatedSystems.filter((s: any) => s.riskClassification?.category === "Minimal").length,
+    totalCount: validatedSystems.length,
+  };
+  
+  return {
+    ...context,
+    systems: validatedSystems,
+    riskSummary,
+  };
 }
 
 /**
@@ -475,6 +695,12 @@ export async function assessCompliance(
     };
   }
   
+  // Validate and fix any risk classification inconsistencies in the input data
+  if (aiServicesContext) {
+    console.error("[assess_compliance] Validating risk classifications for consistency...");
+    aiServicesContext = validateAIServicesContext(aiServicesContext);
+  }
+  
   console.error("\n🔍 Starting EU AI Act Compliance Assessment");
   console.error("=".repeat(60));
   
@@ -492,7 +718,7 @@ export async function assessCompliance(
   const now = new Date().toISOString();
   
   // Step 1: Generate compliance assessment using Grok 4
-  console.error("\n🧠 Analyzing compliance with Grok 4...");
+  console.error("\n🧠 Analyzing compliance (streaming thinking tokens)...");
   
   const assessmentPrompt = generateAssessmentPrompt(
     organizationContext,
@@ -500,14 +726,47 @@ export async function assessCompliance(
     focusAreas
   );
   
-  const assessmentResponse = await generateText({
+  // Use streamText to get thinking tokens in real-time
+  const assessmentStream = streamText({
     model,
     system: "You are an expert EU AI Act compliance consultant. Provide detailed, actionable compliance assessments in valid JSON format only. Always respond with a valid JSON object.",
     prompt: assessmentPrompt,
     temperature: 0.3,
+    // Reduce reasoning effort to prevent timeouts (LOW for speed)
+    providerOptions: {
+      anthropic: {
+        thinking: { type: "enabled", budgetTokens: 1500 },  // Minimal thinking budget for Claude - faster
+      },
+      openai: {
+        reasoningEffort: "low",  // Low reasoning effort for GPT - much faster
+      },
+    },
   });
   
-  const assessmentContent = assessmentResponse.text || "{}";
+  // Stream and log thinking tokens as they come
+  let assessmentContent = "";
+  console.error("\n--- Model Thinking (Assessment) ---");
+  
+  for await (const event of assessmentStream.fullStream) {
+    // Handle reasoning tokens (Claude uses reasoning-signature, others may use different types)
+    if ((event as any).type === "reasoning" || (event as any).type === "reasoning-signature") {
+      const reasoning = (event as any).textDelta ?? (event as any).reasoning ?? (event as any).signature ?? "";
+      if (reasoning) {
+        process.stderr.write(`💭 ${reasoning}`);
+      }
+    } else if (event.type === "text-delta") {
+      const text = (event as any).textDelta ?? "";
+      assessmentContent += text;
+      // Also log text as it streams
+      process.stderr.write(text);
+    }
+  }
+  
+  console.error("\n--- End Thinking ---\n");
+  
+  // Ensure we have the full text
+  const finalResult = await assessmentStream;
+  assessmentContent = assessmentContent || (await finalResult.text) || "{}";
   const assessmentData = parseJSONResponse<{
     overallScore: number;
     riskLevel: string;
@@ -539,7 +798,7 @@ export async function assessCompliance(
   let documentationFilePaths: string[] = [];
   
   if (generateDocumentation) {
-    console.error("\n📄 Generating documentation templates...");
+    console.error("\n📄 Generating documentation templates (streaming thinking tokens)...");
     
     const docPrompt = generateDocumentationPrompt(
       organizationContext,
@@ -547,14 +806,48 @@ export async function assessCompliance(
       { gaps: assessmentData.gaps, recommendations: assessmentData.recommendations }
     );
     
-    const docResponse = await generateText({
+    // Use streamText to get thinking tokens in real-time
+    const docStream = streamText({
       model,
       system: "You are an expert EU AI Act compliance documentation specialist. Generate professional documentation templates in valid JSON format with markdown content. Always respond with a valid JSON object.",
       prompt: docPrompt,
       temperature: 0.2,
+      // Reduce reasoning effort to prevent timeouts (LOW for speed)
+      providerOptions: {
+        anthropic: {
+          thinking: { type: "enabled", budgetTokens: 1500 },  // Minimal thinking budget for Claude - faster
+        },
+        openai: {
+          reasoningEffort: "low",  // Low reasoning effort for GPT - much faster
+        },
+      },
     });
     
-    const docContent = docResponse.text || "{}";
+    // Stream and log thinking tokens as they come
+    let docContent = "";
+    console.error("\n--- Model Thinking (Documentation) ---");
+    
+    for await (const event of docStream.fullStream) {
+      // Handle reasoning tokens (Claude uses reasoning-signature, others may use different types)
+      if ((event as any).type === "reasoning" || (event as any).type === "reasoning-signature") {
+        const reasoning = (event as any).textDelta ?? (event as any).reasoning ?? (event as any).signature ?? "";
+        if (reasoning) {
+          process.stderr.write(`💭 ${reasoning}`);
+        }
+      } else if (event.type === "text-delta") {
+        const text = (event as any).textDelta ?? "";
+        docContent += text;
+        // Also log text as it streams
+        process.stderr.write(text);
+      }
+    }
+    
+    console.error("\n--- End Thinking ---\n");
+    
+    // Ensure we have the full text
+    const finalDocResult = await docStream;
+    docContent = docContent || (await finalDocResult.text) || "{}";
+    
     documentation = parseJSONResponse<ComplianceDocumentation>(docContent) || undefined;
     
     if (documentation) {
@@ -624,12 +917,6 @@ export async function assessCompliance(
     console.error("\n📄 Documentation Templates Generated:");
     if (documentation.riskManagementTemplate) console.error("   ✓ Risk Management System Template (Article 9)");
     if (documentation.technicalDocumentation) console.error("   ✓ Technical Documentation Template (Article 11/Annex IV)");
-    if (documentation.conformityAssessment) console.error("   ✓ Conformity Assessment Template (Article 43)");
-    if (documentation.transparencyNotice) console.error("   ✓ Transparency Notice Template (Article 50)");
-    if (documentation.qualityManagementSystem) console.error("   ✓ Quality Management System Template (Article 17)");
-    if (documentation.humanOversightProcedure) console.error("   ✓ Human Oversight Procedure Template (Article 14)");
-    if (documentation.dataGovernancePolicy) console.error("   ✓ Data Governance Policy Template (Article 10)");
-    if (documentation.incidentReportingProcedure) console.error("   ✓ Incident Reporting Procedure Template");
   }
   
   console.error("=".repeat(60) + "\n");
@@ -668,12 +955,6 @@ async function saveDocumentationFiles(
   const docFiles: Array<{ name: string; content: string | undefined; article?: string }> = [
     { name: "01_Risk_Management_System", content: documentation.riskManagementTemplate, article: "Article 9" },
     { name: "02_Technical_Documentation", content: documentation.technicalDocumentation, article: "Article 11 / Annex IV" },
-    { name: "03_Conformity_Assessment", content: documentation.conformityAssessment, article: "Article 43" },
-    { name: "04_Transparency_Notice", content: documentation.transparencyNotice, article: "Article 50" },
-    { name: "05_Quality_Management_System", content: documentation.qualityManagementSystem, article: "Article 17" },
-    { name: "06_Human_Oversight_Procedure", content: documentation.humanOversightProcedure, article: "Article 14" },
-    { name: "07_Data_Governance_Policy", content: documentation.dataGovernancePolicy, article: "Article 10" },
-    { name: "08_Incident_Reporting_Procedure", content: documentation.incidentReportingProcedure },
   ];
   
   for (const doc of docFiles) {

@@ -15,7 +15,7 @@
  */
 
 import { xai } from "@ai-sdk/xai";
-import { generateText, streamText } from "ai";
+import { generateText, stepCountIs, streamText } from "ai";
 import { experimental_createMCPClient as createMCPClient } from "@ai-sdk/mcp";
 import { Experimental_StdioMCPTransport as StdioMCPTransport } from "@ai-sdk/mcp/mcp-stdio";
 import { resolve, dirname } from "path";
@@ -29,6 +29,134 @@ const __dirname = dirname(__filename);
 
 // Path to the built MCP server
 const MCP_SERVER_PATH = resolve(__dirname, "../../../../packages/eu-ai-act-mcp/dist/index.js");
+
+/**
+ * HIGH-RISK KEYWORDS based on EU AI Act Annex III
+ * Source: https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=OJ:L_202401689
+ */
+const HIGH_RISK_KEYWORDS = [
+  // Annex III Point 8(a) - Administration of justice (LEGAL AI)
+  "legal", "law", "lawyer", "attorney", "judicial", "justice", "court",
+  "litigation", "contract", "compliance", "regulatory", "statute",
+  "legal advice", "legal consulting", "legal assistant", "legal research",
+  "dispute resolution", "arbitration", "mediation",
+  // Annex III Point 4 - Employment
+  "recruitment", "hiring", "hr", "human resources", "employee", "workforce",
+  "resume", "cv", "candidate", "job application", "termination",
+  // Annex III Point 5 - Essential services
+  "credit", "scoring", "loan", "insurance", "financial risk",
+  "creditworthiness", "emergency services",
+  // Annex III Point 1 - Biometrics  
+  "biometric", "facial recognition", "face recognition", "fingerprint",
+  "identity verification", "remote identification",
+  // Annex III Point 3 - Education
+  "education", "student", "academic", "exam", "grading", "admission",
+  // Annex III Point 6 - Law enforcement
+  "law enforcement", "police", "crime", "profiling", "polygraph",
+  // Annex III Point 2 - Critical infrastructure
+  "critical infrastructure", "safety component", "water supply",
+  "gas supply", "electricity", "transport",
+  // Annex III Point 5(b) - Healthcare
+  "healthcare", "medical", "diagnosis", "clinical", "patient", "health",
+];
+
+/**
+ * Validate risk classification for a system based on EU AI Act Annex III
+ * Ensures legal AI systems are correctly classified as HIGH RISK per Point 8(a)
+ */
+function validateSystemRiskClassification(system: any): any {
+  if (!system) return system;
+  
+  const name = (system.system?.name || system.name || "").toLowerCase();
+  const description = (system.system?.description || system.description || "").toLowerCase();
+  const purpose = (system.system?.intendedPurpose || system.intendedPurpose || "").toLowerCase();
+  const contextString = `${name} ${description} ${purpose}`;
+  
+  // Check for legal AI indicators (Annex III Point 8(a))
+  const isLegalAI = contextString.includes("legal") || 
+                    contextString.includes("law") ||
+                    contextString.includes("lawyer") ||
+                    contextString.includes("attorney") ||
+                    contextString.includes("judicial") ||
+                    contextString.includes("justice") ||
+                    contextString.includes("court") ||
+                    contextString.includes("litigation") ||
+                    contextString.includes("contract review") ||
+                    contextString.includes("compliance advi") ||
+                    contextString.includes("regulatory advi");
+  
+  // Check for other high-risk keywords
+  const matchedHighRiskKeywords = HIGH_RISK_KEYWORDS.filter(keyword => 
+    contextString.includes(keyword.toLowerCase())
+  );
+  const hasHighRiskKeywords = matchedHighRiskKeywords.length > 0;
+  
+  const rc = system.riskClassification || {};
+  let needsCorrection = false;
+  
+  if (isLegalAI && rc.category !== "High" && rc.category !== "Unacceptable") {
+    console.log(`⚠️  [Agent Risk Validation] Legal AI detected - correcting "${rc.category}" to "High"`);
+    console.log(`   System: ${name}`);
+    console.log(`   Reason: Legal AI per EU AI Act Annex III Point 8(a) - Administration of justice`);
+    rc.category = "High";
+    rc.annexIIICategory = "Annex III, Point 8(a) - Administration of justice and democratic processes";
+    rc.justification = "AI system providing legal assistance, consulting, or advice. Per EU AI Act Annex III Point 8(a), such systems are HIGH RISK.";
+    rc.riskScore = Math.max(rc.riskScore || 0, 85);
+    rc.conformityAssessmentRequired = true;
+    rc.conformityAssessmentType = "Internal Control";
+    needsCorrection = true;
+  } else if (hasHighRiskKeywords && rc.category !== "High" && rc.category !== "Unacceptable") {
+    console.log(`⚠️  [Agent Risk Validation] High-risk keywords detected - correcting "${rc.category}" to "High"`);
+    console.log(`   System: ${name}`);
+    console.log(`   Keywords: ${matchedHighRiskKeywords.slice(0, 3).join(", ")}`);
+    rc.category = "High";
+    rc.riskScore = Math.max(rc.riskScore || 0, 75);
+    rc.conformityAssessmentRequired = true;
+    rc.conformityAssessmentType = "Internal Control";
+    needsCorrection = true;
+  }
+  
+  if (needsCorrection) {
+    return {
+      ...system,
+      riskClassification: rc,
+    };
+  }
+  
+  return system;
+}
+
+/**
+ * Validate all systems in assess_compliance or discover_ai_services results
+ */
+function validateToolResult(toolName: string, result: any): any {
+  if (!result) return result;
+  
+  if (toolName === "assess_compliance" || toolName === "discover_ai_services") {
+    // Check if result has systems array
+    if (result.systems && Array.isArray(result.systems)) {
+      result.systems = result.systems.map((s: any) => validateSystemRiskClassification(s));
+      
+      // Recalculate risk summary
+      if (result.riskSummary) {
+        result.riskSummary = {
+          ...result.riskSummary,
+          highRiskCount: result.systems.filter((s: any) => s.riskClassification?.category === "High").length,
+          limitedRiskCount: result.systems.filter((s: any) => s.riskClassification?.category === "Limited").length,
+          minimalRiskCount: result.systems.filter((s: any) => s.riskClassification?.category === "Minimal").length,
+          unacceptableRiskCount: result.systems.filter((s: any) => s.riskClassification?.category === "Unacceptable").length,
+        };
+      }
+    }
+    
+    // Check assessment for gaps related to legal systems
+    if (result.assessment?.gaps) {
+      // Ensure legal AI systems have appropriate gaps flagged
+    }
+  }
+  
+  return result;
+}
 
 /**
  * Get the AI model based on AI_MODEL environment variable
@@ -110,7 +238,17 @@ export function createAgent() {
           ],
           // MCP tools are compatible at runtime but have different TypeScript types
           tools: tools as any,
-          maxSteps: 10,
+          // stop when at least three tools runned and response is generated
+          stopWhen: stepCountIs(3),
+          // Reduce reasoning effort to prevent timeouts (LOW for speed)
+          providerOptions: {
+            anthropic: {
+              thinking: { type: "enabled", budgetTokens: 2000 },  // Minimal thinking budget for Claude
+            },
+            openai: {
+              reasoningEffort: "low",  // Low reasoning effort for GPT - faster responses
+            },
+          },
         });
 
         // Output tool results with detailed information
@@ -122,9 +260,14 @@ export function createAgent() {
                 console.log("─".repeat(50));
                 
                 try {
-                  const parsed = typeof toolResult.result === 'string' 
-                    ? JSON.parse(toolResult.result) 
-                    : toolResult.result;
+                  // Access result safely - TypedToolResult may have result in different property
+                  const resultValue = (toolResult as any).result ?? (toolResult as any).output ?? toolResult;
+                  let parsed = typeof resultValue === 'string' 
+                    ? JSON.parse(resultValue) 
+                    : resultValue;
+                  
+                  // Validate and correct risk classifications per EU AI Act Annex III
+                  parsed = validateToolResult(toolResult.toolName, parsed);
                   
                   // Handle assess_compliance results specially to show documentation
                   if (toolResult.toolName === 'assess_compliance' && parsed) {
@@ -161,11 +304,25 @@ export function createAgent() {
                       console.log(`\n🤖 Model Used: ${parsed.metadata.modelUsed}`);
                     }
                   } else if (toolResult.toolName === 'discover_ai_services' && parsed) {
+                    // Validate systems in discovery results
                     if (parsed.riskSummary) {
                       console.log(`🤖 Total Systems: ${parsed.riskSummary.totalCount}`);
                       console.log(`   High-Risk: ${parsed.riskSummary.highRiskCount}`);
                       console.log(`   Limited-Risk: ${parsed.riskSummary.limitedRiskCount}`);
                       console.log(`   Minimal-Risk: ${parsed.riskSummary.minimalRiskCount}`);
+                    }
+                    // Show any legal AI systems detected
+                    if (parsed.systems) {
+                      const legalSystems = parsed.systems.filter((s: any) => {
+                        const ctx = `${s.system?.name || ""} ${s.system?.intendedPurpose || ""}`.toLowerCase();
+                        return ctx.includes("legal") || ctx.includes("law") || ctx.includes("judicial");
+                      });
+                      if (legalSystems.length > 0) {
+                        console.log(`\n⚖️  Legal AI Systems (HIGH RISK per Annex III Point 8(a)):`);
+                        for (const sys of legalSystems) {
+                          console.log(`   - ${sys.system?.name}: ${sys.riskClassification?.category}`);
+                        }
+                      }
                     }
                   } else if (toolResult.toolName === 'discover_organization' && parsed) {
                     if (parsed.organization) {
@@ -176,7 +333,8 @@ export function createAgent() {
                   }
                 } catch {
                   // If not JSON, just show raw result summary
-                  const resultStr = String(toolResult.result);
+                  const resultValue = (toolResult as any).result ?? (toolResult as any).output ?? toolResult;
+                  const resultStr = String(resultValue);
                   console.log(`Result: ${resultStr.substring(0, 200)}${resultStr.length > 200 ? '...' : ''}`);
                 }
                 
@@ -207,15 +365,18 @@ export function createAgent() {
         // MCP tools are compatible at runtime but have different TypeScript types
         tools: tools as any,
         // Increase maxSteps to ensure all 3 tools + final response
-        maxSteps: 15,
+        stopWhen: stepCountIs(3),
+        // Reduce reasoning effort to prevent timeouts (LOW for speed)
+        providerOptions: {
+          anthropic: {
+            thinking: { type: "enabled", budgetTokens: 2000 },  // Minimal thinking budget for Claude
+          },
+          openai: {
+            reasoningEffort: "low",  // Low reasoning effort for GPT - faster responses
+          },
+        },
         // Log each step for debugging
         onStepFinish: async (step) => {
-          console.log(`\n[Agent] Step finished:`, {
-            stepType: step.stepType,
-            toolCalls: step.toolCalls?.map(t => t.toolName) || [],
-            hasText: !!step.text,
-          });
-          
           // Output tool results with detailed information
           if (step.toolResults && step.toolResults.length > 0) {
             for (const toolResult of step.toolResults) {
@@ -223,9 +384,14 @@ export function createAgent() {
               console.log("─".repeat(50));
               
               try {
-                const result = typeof toolResult.result === 'string' 
-                  ? JSON.parse(toolResult.result) 
-                  : toolResult.result;
+                // Access result safely - TypedToolResult may have result in different property
+                const resultValue = (toolResult as any).result ?? (toolResult as any).output ?? toolResult;
+                let result = typeof resultValue === 'string' 
+                  ? JSON.parse(resultValue) 
+                  : resultValue;
+                
+                // Validate and correct risk classifications per EU AI Act Annex III
+                result = validateToolResult(toolResult.toolName, result);
                 
                 // Handle assess_compliance results specially to show documentation
                 if (toolResult.toolName === 'assess_compliance' && result) {
@@ -262,12 +428,25 @@ export function createAgent() {
                     console.log(`\n🤖 Model Used: ${result.metadata.modelUsed}`);
                   }
                 } else if (toolResult.toolName === 'discover_ai_services' && result) {
-                  // Show AI systems discovery summary
+                  // Validate systems in discovery results
                   if (result.riskSummary) {
                     console.log(`🤖 Total Systems: ${result.riskSummary.totalCount}`);
                     console.log(`   High-Risk: ${result.riskSummary.highRiskCount}`);
                     console.log(`   Limited-Risk: ${result.riskSummary.limitedRiskCount}`);
                     console.log(`   Minimal-Risk: ${result.riskSummary.minimalRiskCount}`);
+                  }
+                  // Show any legal AI systems detected
+                  if (result.systems) {
+                    const legalSystems = result.systems.filter((s: any) => {
+                      const ctx = `${s.system?.name || ""} ${s.system?.intendedPurpose || ""}`.toLowerCase();
+                      return ctx.includes("legal") || ctx.includes("law") || ctx.includes("judicial");
+                    });
+                    if (legalSystems.length > 0) {
+                      console.log(`\n⚖️  Legal AI Systems (HIGH RISK per Annex III Point 8(a)):`);
+                      for (const sys of legalSystems) {
+                        console.log(`   - ${sys.system?.name}: ${sys.riskClassification?.category}`);
+                      }
+                    }
                   }
                 } else if (toolResult.toolName === 'discover_organization' && result) {
                   // Show organization discovery summary
@@ -279,7 +458,8 @@ export function createAgent() {
                 }
               } catch {
                 // If not JSON, just show raw result summary
-                const resultStr = String(toolResult.result);
+                const resultValue = (toolResult as any).result ?? (toolResult as any).output ?? toolResult;
+                const resultStr = String(resultValue);
                 console.log(`Result: ${resultStr.substring(0, 200)}${resultStr.length > 200 ? '...' : ''}`);
               }
               

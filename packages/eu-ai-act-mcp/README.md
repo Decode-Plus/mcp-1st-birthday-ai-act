@@ -417,14 +417,17 @@ AI-powered compliance assessment and documentation generator using Claude 4-5, G
     }>;
   };
   documentation?: {
+    // ✅ CURRENTLY GENERATED (for speed & cost optimization):
     riskManagementTemplate?: string;      // Article 9 - Markdown template
     technicalDocumentation?: string;       // Article 11 - Markdown template
-    conformityAssessment?: string;         // Article 43 - Markdown template
-    transparencyNotice?: string;           // Article 50 - Markdown template
-    qualityManagementSystem?: string;      // Article 17 - Markdown template
-    humanOversightProcedure?: string;      // Article 14 - Markdown template
-    dataGovernancePolicy?: string;         // Article 10 - Markdown template
-    incidentReportingProcedure?: string;   // Incident reporting template
+    
+    // 🔜 PLANNED (not yet implemented - omitted for API cost & speed):
+    // conformityAssessment?: string;         // Article 43 - Markdown template
+    // transparencyNotice?: string;           // Article 50 - Markdown template
+    // qualityManagementSystem?: string;      // Article 17 - Markdown template
+    // humanOversightProcedure?: string;      // Article 14 - Markdown template
+    // dataGovernancePolicy?: string;         // Article 10 - Markdown template
+    // incidentReportingProcedure?: string;   // Incident reporting template
   };
   reasoning: string;             // Chain-of-thought explanation
   metadata: {
@@ -434,8 +437,16 @@ AI-powered compliance assessment and documentation generator using Claude 4-5, G
     organizationAssessed?: string;
     systemsAssessed: string[];
     focusAreas: string[];
+    documentationFiles?: string[]; // Paths to generated markdown files
   };
 }
+```
+
+> ⚠️ **Note on Documentation Generation:** Currently, only **2 documentation templates** are generated:
+> - ⚡ **Risk Management System** (Article 9)
+> - 📋 **Technical Documentation** (Article 11 / Annex IV)
+>
+> The remaining 6 templates (Conformity Assessment, Transparency Notice, Quality Management System, Human Oversight Procedure, Data Governance Policy, Incident Reporting Procedure) are **planned but not yet implemented** to optimize API costs and response speed during the hackathon demo.
 ```
 
 **EU AI Act References:**
@@ -607,9 +618,6 @@ This MCP server implements compliance tools based on:
 - **Limited Risk** - Transparency obligations (Article 50)
 - **Minimal Risk** - No specific obligations
 
-## License
-
-MIT License - see [LICENSE](../../LICENSE) file for details.
 
 ## Contributing
 

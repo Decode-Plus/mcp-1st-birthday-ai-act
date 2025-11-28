@@ -1,3 +1,16 @@
+---
+title: EU AI Act Compliance Agent
+emoji: 🇪🇺
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+pinned: true
+tags:
+  - building-mcp-track-enterprise
+  - mcp-in-action-track-enterprise
+short_description: AI-powered EU AI Act compliance assessment with MCP tools
+---
+
 # 🇪🇺 EU AI Act Compliance Agent
 
 An interactive AI agent with Gradio UI for navigating EU AI Act compliance requirements, powered by Vercel AI SDK v5 and the EU AI Act MCP Server.
@@ -160,11 +173,17 @@ Agent: I'll assess your chatbot and generate the required documents...
        [Generated documents]:
        ✓ Risk Management System (Article 9)
        ✓ Technical Documentation (Article 11)
-       ✓ Transparency Notice (Article 50)
        
-       Your chatbot is classified as Limited Risk. Download the 
-       documentation package using the export button.
+       Your chatbot is classified as Limited Risk. The documentation
+       templates are displayed in the chat and saved to the 
+       compliance-docs directory.
 ```
+
+> ⚠️ **Note on Documentation Generation:** Currently, only **2 documentation templates** are generated:
+> - ⚡ **Risk Management System** (Article 9)
+> - 📋 **Technical Documentation** (Article 11 / Annex IV)
+>
+> Additional templates (Conformity Assessment, Transparency Notice, Quality Management System, etc.) are **planned but not yet implemented** to optimize API costs and response speed during the hackathon demo.
 
 ## 🔧 Configuration
 
@@ -249,11 +268,6 @@ curl -X POST http://localhost:3001/api/chat \
 - **MCP**: Model Context Protocol for tool integration
 - **Monorepo**: Turborepo for efficient builds
 
-## 📄 License
-
-MIT License - see [LICENSE](../../LICENSE) for details
-
----
 
 <div align="center">
 

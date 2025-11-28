@@ -127,7 +127,19 @@ async function extractAISystemsFromResults(
   const systems: AISystemProfile[] = [];
   
   // Extract different types of AI systems based on common patterns
+  // Based on EU AI Act Annex III - High-Risk AI Systems Categories
+  // Source: https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=OJ:L_202401689
   const systemPatterns = [
+    // ANNEX III POINT 8(a) - LEGAL/JUDICIAL AI (HIGH RISK)
+    {
+      keywords: ["legal", "law", "lawyer", "attorney", "judicial", "court", "litigation", "contract", "compliance", "regulatory"],
+      systemType: "Legal AI Assistant",
+      systemId: "legal-ai-001",
+      riskCategory: "High" as RiskCategory,
+      description: "AI system for legal assistance, advice, research, or document analysis",
+      intendedPurpose: "Legal consulting, contract review, legal research, compliance advice, or interpretation of laws and regulations",
+    },
+    // ANNEX III POINT 4 - EMPLOYMENT (HIGH RISK)
     {
       keywords: ["recruitment", "hiring", "resume", "candidate", "hr", "job"],
       systemType: "Recruitment AI Assistant",
@@ -136,38 +148,34 @@ async function extractAISystemsFromResults(
       description: "AI system for resume screening and candidate ranking",
       intendedPurpose: "Automated screening of job applications and ranking of candidates based on qualifications",
     },
+    // ANNEX III POINT 6 - LAW ENFORCEMENT (HIGH RISK)
     {
-      keywords: ["chatbot", "customer support", "conversational", "chat", "virtual assistant"],
-      systemType: "Customer Support Chatbot",
-      systemId: "cs-bot-001",
-      riskCategory: "Limited" as RiskCategory,
-      description: "AI-powered chatbot for customer inquiries and support",
-      intendedPurpose: "Automated customer support, FAQ responses, and order status inquiries",
-    },
-    {
-      keywords: ["fraud", "detection", "security", "anomaly"],
+      keywords: ["fraud", "detection", "security", "anomaly", "law enforcement", "crime", "police"],
       systemType: "Fraud Detection System",
       systemId: "fraud-001",
       riskCategory: "High" as RiskCategory,
       description: "AI system for fraud detection and prevention",
       intendedPurpose: "Automated detection of fraudulent transactions and security threats",
     },
+    // ANNEX III POINT 5(b) - HEALTHCARE (HIGH RISK)
     {
-      keywords: ["healthcare", "medical", "diagnosis", "patient", "clinical"],
+      keywords: ["healthcare", "medical", "diagnosis", "patient", "clinical", "health"],
       systemType: "Healthcare AI System",
       systemId: "health-001",
       riskCategory: "High" as RiskCategory,
       description: "AI system for healthcare and medical applications",
       intendedPurpose: "Medical diagnosis support, patient data analysis, or clinical decision support",
     },
+    // ANNEX III POINT 5(b) - CREDIT SCORING (HIGH RISK)
     {
-      keywords: ["credit", "scoring", "loan", "financial", "risk assessment"],
+      keywords: ["credit", "scoring", "loan", "financial", "risk assessment", "creditworthiness"],
       systemType: "Credit Scoring System",
       systemId: "credit-001",
       riskCategory: "High" as RiskCategory,
       description: "AI system for credit scoring and financial risk assessment",
       intendedPurpose: "Automated credit evaluation and loan approval recommendations",
     },
+    // ANNEX III POINT 1 - BIOMETRICS (HIGH RISK)
     {
       keywords: ["biometric", "facial recognition", "face", "fingerprint", "identity"],
       systemType: "Biometric Identification System",
@@ -176,6 +184,25 @@ async function extractAISystemsFromResults(
       description: "AI system for biometric identification and verification",
       intendedPurpose: "Biometric authentication, facial recognition, or identity verification",
     },
+    // ANNEX III POINT 3 - EDUCATION (HIGH RISK)
+    {
+      keywords: ["education", "student", "academic", "exam", "grading", "admission", "learning"],
+      systemType: "Education AI System",
+      systemId: "edu-001",
+      riskCategory: "High" as RiskCategory,
+      description: "AI system for educational assessment or admissions",
+      intendedPurpose: "Student evaluation, grading, admissions decisions, or learning outcome assessment",
+    },
+    // LIMITED RISK - Chatbots (Article 50)
+    {
+      keywords: ["chatbot", "customer support", "conversational", "chat", "virtual assistant"],
+      systemType: "Customer Support Chatbot",
+      systemId: "cs-bot-001",
+      riskCategory: "Limited" as RiskCategory,
+      description: "AI-powered chatbot for customer inquiries and support",
+      intendedPurpose: "Automated customer support, FAQ responses, and order status inquiries",
+    },
+    // MINIMAL RISK
     {
       keywords: ["recommendation", "personalization", "content", "product recommendation"],
       systemType: "Recommendation Engine",
@@ -383,6 +410,70 @@ function createAISystemProfile(
       researchSources: sources,
     },
   };
+}
+
+/**
+ * Validate and fix risk classification consistency
+ * Ensures category, annexIIICategory, riskScore, and conformityAssessment are aligned
+ */
+function validateRiskClassificationConsistency(riskClassification: any): any {
+  if (!riskClassification) return riskClassification;
+  
+  const rc = { ...riskClassification };
+  const annexIII = (rc.annexIIICategory || "").toLowerCase();
+  const justification = (rc.justification || "").toLowerCase();
+  
+  // Check for indicators of high-risk classification
+  const hasAnnexIIIIndicator = 
+    annexIII.includes("annex iii") || 
+    annexIII.includes("annex-iii") ||
+    (annexIII.includes("high-risk") || annexIII.includes("high risk")) &&
+    !annexIII.includes("n/a");
+  
+  const hasHighRiskJustification =
+    (justification.includes("high-risk") || justification.includes("high risk")) &&
+    !justification.includes("does not fall under");
+  
+  const hasHighRiskScore = rc.riskScore >= 70;
+  const requiresConformity = rc.conformityAssessmentRequired === true;
+  
+  // Check for unacceptable risk indicators
+  const hasUnacceptableIndicator =
+    annexIII.includes("article 5") ||
+    annexIII.includes("prohibited") ||
+    annexIII.includes("unacceptable");
+  
+  // Determine if there's a mismatch
+  let correctedCategory = rc.category;
+  
+  if (hasUnacceptableIndicator && rc.category !== "Unacceptable") {
+    correctedCategory = "Unacceptable";
+  } else if ((hasAnnexIIIIndicator || hasHighRiskJustification || hasHighRiskScore || requiresConformity) && 
+             rc.category !== "High" && rc.category !== "Unacceptable") {
+    correctedCategory = "High";
+  }
+  
+  // If category was corrected, log and fix
+  if (correctedCategory !== rc.category) {
+    console.error(`[Risk Validation] Corrected inconsistent classification:`);
+    console.error(`  - Original category: "${rc.category}"`);
+    console.error(`  - Corrected to: "${correctedCategory}"`);
+    if (hasAnnexIIIIndicator) console.error(`  - Reason: annexIIICategory indicates "${rc.annexIIICategory}"`);
+    if (hasHighRiskScore) console.error(`  - Reason: riskScore ${rc.riskScore} >= 70`);
+    if (requiresConformity) console.error(`  - Reason: conformityAssessmentRequired is true`);
+    
+    rc.category = correctedCategory;
+    
+    // Also ensure other fields are consistent with the corrected category
+    if (correctedCategory === "High" || correctedCategory === "Unacceptable") {
+      rc.conformityAssessmentRequired = true;
+      if (!rc.conformityAssessmentType || rc.conformityAssessmentType === "Not Required") {
+        rc.conformityAssessmentType = "Internal Control";
+      }
+    }
+  }
+  
+  return rc;
 }
 
 /**
@@ -866,8 +957,15 @@ export async function discoverAIServices(
     // Re-classify risk if needed
     const classifiedRisk = classifyRisk(system);
     if (classifiedRisk !== system.riskClassification.category) {
-      updatedSystem.riskClassification.category = classifiedRisk;
+      console.error(`[Risk Reclassification] ${system.system.name}: ${system.riskClassification.category} → ${classifiedRisk}`);
+      // Rebuild entire risk classification with the new category for consistency
+      updatedSystem.riskClassification = buildRiskClassification(classifiedRisk, system.system.name);
+      // Also update compliance status to match new risk level
+      updatedSystem.complianceStatus = buildComplianceStatus(classifiedRisk);
     }
+    
+    // Validate risk classification consistency (category, annexIII, riskScore should align)
+    updatedSystem.riskClassification = validateRiskClassificationConsistency(updatedSystem.riskClassification);
     
     // Analyze compliance gaps
     const gaps = analyzeComplianceGaps(updatedSystem);

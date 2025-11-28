@@ -39,6 +39,5 @@
     "ai-agent",
     "gradio",
     "vercel-ai-sdk"
-  ],
-  "license": "MIT"
+  ]
 }

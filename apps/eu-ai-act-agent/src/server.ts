@@ -41,6 +41,9 @@ app.get("/health", (_req, res) => {
 /**
  * Process stream events and write to response
  * Returns set of tool names that were called
+ * 
+ * Tracks "thinking" phases - text that appears before tool calls
+ * vs "response" text that appears after all tools complete
  */
 async function processStreamEvents(
   stream: AsyncIterable<any>,
@@ -49,22 +52,76 @@ async function processStreamEvents(
   const toolsCalled = new Set<string>();
   const toolResults = new Map<string, any>();
   let hasText = false;
+  
+  // Track phase for thinking vs response text
+  let pendingToolCall = false;  // True when we've seen a tool_call but not its result yet
+  let hasHadToolCalls = false;  // True once we've seen at least one tool call
 
   for await (const event of stream) {
-    if (event.type === "text-delta") {
-      hasText = true;
+    // Log all non-text events for debugging
+    if (event.type !== "text-delta") {
+      console.log("Stream event:", event.type, JSON.stringify(event).substring(0, 200));
     } else {
-      console.log("Stream event:", event.type);
+      hasText = true;
     }
     
     switch (event.type) {
+      // Handle reasoning/thinking tokens from Claude and GPT
+      // Claude uses "reasoning" with textDelta, OpenAI may use different formats
+      case "reasoning":
+        const reasoningText = (event as any).textDelta ?? "";
+        if (reasoningText) {
+          console.log("[THINKING]", reasoningText.substring(0, 100));
+          res.write(`data: ${JSON.stringify({ 
+            type: "thinking", 
+            content: reasoningText,
+          })}\n\n`);
+        }
+        break;
+      
+      // Handle reasoning signature (Claude's thinking summary)
+      case "reasoning-signature":
+        const signatureText = (event as any).signature ?? "";
+        if (signatureText) {
+          console.log("[THINKING SIGNATURE]", signatureText.substring(0, 100));
+          res.write(`data: ${JSON.stringify({ 
+            type: "thinking", 
+            content: `[Reasoning Summary] ${signatureText}`,
+          })}\n\n`);
+        }
+        break;
+        
+      // Handle redacted reasoning (when thinking is hidden)
+      case "redacted-reasoning":
+        console.log("[REDACTED REASONING]");
+        res.write(`data: ${JSON.stringify({ 
+          type: "thinking", 
+          content: "[Model is reasoning internally...]",
+        })}\n\n`);
+        break;
+      
       case "text-delta":
         const textContent = (event as any).textDelta ?? (event as any).delta ?? (event as any).text ?? "";
-        res.write(`data: ${JSON.stringify({ type: "text", content: textContent })}\n\n`);
+        
+        // Determine if this is thinking or response text
+        // Text before any tool call = thinking
+        // Text between tool result and next tool call = thinking  
+        // Text after last tool result with no more tool calls = response (we can't know this yet, so we mark it as potential_response)
+        const textPhase = hasHadToolCalls && !pendingToolCall ? "potential_response" : "thinking";
+        
+        res.write(`data: ${JSON.stringify({ 
+          type: "text", 
+          content: textContent,
+          phase: textPhase,
+          hasHadToolCalls,
+        })}\n\n`);
         break;
 
       case "tool-call":
         console.log("TOOL CALL:", event.toolName);
+        hasHadToolCalls = true;
+        pendingToolCall = true;
+        
         toolsCalled.add(event.toolName);
         const toolArgs = (event as any).args ?? (event as any).input ?? {};
         res.write(`data: ${JSON.stringify({ 
@@ -77,6 +134,8 @@ async function processStreamEvents(
 
       case "tool-result":
         console.log("TOOL RESULT:", event.toolName);
+        pendingToolCall = false;
+        
         const toolOutput = (event as any).output;
         const directResult = (event as any).result;
         let parsedResult = null;
@@ -102,9 +161,12 @@ async function processStreamEvents(
         break;
 
       case "step-finish":
+        // When a step finishes, if we had tool calls and there's no pending tool,
+        // the next text will be response (or thinking for next tool)
         res.write(`data: ${JSON.stringify({ 
           type: "step_finish",
           finishReason: event.finishReason,
+          hasHadToolCalls,
         })}\n\n`);
         break;
 
@@ -637,18 +699,8 @@ After assess_compliance returns, provide a human-readable summary of the complia
         summary += `\n</details>\n\n`;
       }
       
-      // ================== FOOTER ==================
-      const modelUsed = assessData?.metadata?.modelUsed || process.env.AI_MODEL || "Unknown";
-      const modelDisplayName = modelUsed.includes("gpt") ? "OpenAI GPT-5" : 
-                                modelUsed.includes("claude") ? "Anthropic Claude 4.5" : 
-                                modelUsed.includes("grok") ? "xAI Grok-4" : modelUsed;
       
       summary += `---\n\n`;
-      summary += `### ℹ️ About This Report\n\n`;
-      summary += `This compliance report was generated using:\n`;
-      summary += `- **Organization Discovery:** Tavily AI-powered research\n`;
-      summary += `- **AI Systems Discovery:** Automated system classification per Annex III\n`;
-      summary += `- **Compliance Assessment:** ${modelDisplayName} analysis against EU AI Act requirements\n\n`;
       summary += `*Report generated on ${new Date().toISOString()}*\n\n`;
       summary += `**Disclaimer:** This report is for informational purposes only and does not constitute legal advice. Consult with qualified legal professionals for official compliance guidance.\n`;
       

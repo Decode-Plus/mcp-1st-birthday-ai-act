@@ -13,6 +13,74 @@ import { getBrandingInfo } from "../utils/branding.js";
 import { findCompanyDomain } from "../utils/domain.js";
 
 /**
+ * Known Enterprise Companies - Always classified as Enterprise regardless of content
+ * These are large, established companies that should never be classified as "Startup"
+ */
+const KNOWN_ENTERPRISE_COMPANIES = new Set([
+  // Tech Giants
+  "microsoft", "google", "alphabet", "apple", "amazon", "meta", "facebook",
+  "ibm", "oracle", "salesforce", "sap", "adobe", "nvidia", "intel", "cisco",
+  "dell", "hp", "hewlett packard", "vmware", "servicenow", "workday", 
+  "snowflake", "databricks", "palantir",
+  
+  // Cloud Providers
+  "aws", "amazon web services", "azure", "google cloud", "gcp",
+  
+  // European Tech
+  "spotify", "klarna", "adyen", "booking.com", "booking", "asml", "siemens",
+  "bosch", "philips", "ericsson", "nokia", "uipath", "arm",
+  
+  // Financial Services
+  "jpmorgan", "jp morgan", "jpmorgan chase", "goldman sachs", "morgan stanley",
+  "blackrock", "visa", "mastercard", "paypal", "stripe",
+  
+  // Healthcare/Pharma
+  "pfizer", "johnson & johnson", "j&j", "roche", "novartis", "merck", "abbvie",
+  "astrazeneca", "gsk", "glaxosmithkline", "sanofi", "bayer",
+  
+  // Automotive
+  "tesla", "volkswagen", "vw", "bmw", "mercedes", "mercedes-benz", "toyota",
+  "ford", "gm", "general motors",
+  
+  // Retail/E-commerce
+  "walmart", "target", "costco", "home depot", "lowes",
+  
+  // Media & Entertainment
+  "netflix", "disney", "warner bros", "comcast", "viacom",
+  
+  // Telecommunications
+  "at&t", "verizon", "t-mobile", "vodafone", "orange",
+  
+  // Energy
+  "exxon", "shell", "bp", "chevron", "total",
+  
+  // Consulting & Services
+  "accenture", "deloitte", "pwc", "kpmg", "ey", "ernst & young", "mckinsey",
+  "boston consulting", "bain", "capgemini", "cognizant",
+].map(name => name.toLowerCase()));
+
+/**
+ * Check if a company name matches a known enterprise company
+ */
+function isKnownEnterpriseCompany(companyName: string): boolean {
+  const normalizedName = companyName.toLowerCase().trim();
+  
+  // Direct match
+  if (KNOWN_ENTERPRISE_COMPANIES.has(normalizedName)) {
+    return true;
+  }
+  
+  // Check if any known enterprise company name is contained in the input
+  for (const enterpriseName of KNOWN_ENTERPRISE_COMPANIES) {
+    if (normalizedName.includes(enterpriseName) || enterpriseName.includes(normalizedName)) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+/**
  * Well-known company domains mapping
  * Used as fallback when domain is not provided
  */
@@ -360,15 +428,43 @@ function extractComprehensiveData(
   console.error(`✅ Jurisdictions: ${jurisdictions.join(", ")}`);
   
   // Extract company size
+  // Priority: Known Enterprise > Content-based Enterprise > Startup (only if not enterprise) > SME
   let size: "Startup" | "SME" | "Enterprise" = "SME";
-  if (allContent.includes("startup") || allContent.includes("founded recently")) {
-    size = "Startup";
-  } else if (allContent.includes("enterprise") || allContent.includes("fortune 500") || 
-             allContent.includes("multinational") || allContent.includes("global corporation") ||
-             allContent.includes("large company")) {
+  
+  // FIRST: Check if it's a known enterprise company (IBM, Microsoft, Google, etc.)
+  // This takes precedence over any content-based classification
+  if (isKnownEnterpriseCompany(name)) {
     size = "Enterprise";
+    console.error(`✅ Company Size: Enterprise (known enterprise company: ${name})`);
+  } 
+  // SECOND: Check for enterprise indicators in content
+  else if (allContent.includes("enterprise") || allContent.includes("fortune 500") || 
+           allContent.includes("multinational") || allContent.includes("global corporation") ||
+           allContent.includes("large company") || allContent.includes("fortune 100") ||
+           allContent.includes("publicly traded") || allContent.includes("public company") ||
+           allContent.includes("listed company") || allContent.includes("stock exchange")) {
+    size = "Enterprise";
+    console.error(`✅ Company Size: Enterprise (based on content indicators)`);
   }
-  console.error(`✅ Company Size: ${size}`);
+  // THIRD: Only classify as Startup if:
+  // - Content explicitly mentions "startup" AND
+  // - It's NOT a known enterprise company (already checked above)
+  // - Has strong startup indicators (recent founding, small team, seed funding, etc.)
+  else if ((allContent.includes("startup") || allContent.includes("founded recently")) &&
+           (allContent.includes("seed") || allContent.includes("series a") || 
+            allContent.includes("series b") || allContent.includes("early stage") ||
+            allContent.includes("small team") || allContent.includes("founded in 20") ||
+            allContent.includes("venture capital") || allContent.includes("vc funded"))) {
+    size = "Startup";
+    console.error(`✅ Company Size: Startup (strong startup indicators)`);
+  }
+  // DEFAULT: SME (Small/Medium Enterprise)
+  else {
+    size = "SME";
+    console.error(`✅ Company Size: SME (default classification)`);
+  }
+  
+  console.error(`✅ Final Company Size: ${size}`);
   
   // Extract AI maturity
   let aiMaturityLevel: "Nascent" | "Developing" | "Mature" | "Leader" = "Developing";
