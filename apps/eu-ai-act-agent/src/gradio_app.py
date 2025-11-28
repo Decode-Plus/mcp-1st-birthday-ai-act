@@ -230,6 +230,17 @@ with gr.Blocks(
     title="🇪🇺 EU AI Act Compliance Agent",
 ) as demo:
     
+    # Custom CSS to hide Gradio footer
+    gr.HTML("""
+    <style>
+    /* Hide Gradio's default footer */
+    footer { display: none !important; }
+    .gradio-container footer { display: none !important; }
+    .footer { display: none !important; }
+    [data-testid="footer"] { display: none !important; }
+    </style>
+    """)
+    
     # Header
     gr.HTML("""
         <div style="text-align: center; padding: 20px 0;">
@@ -311,11 +322,30 @@ with gr.Blocks(
     
     # Disclaimer box - separate for better visibility
     gr.HTML("""
-<div style="text-align: center; margin: 20px auto; padding: 15px 20px; max-width: 800px; background: #fff3cd !important; border: 2px solid #ffc107 !important; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-    <p style="margin: 0; font-size: 0.9em; color: #1a1a1a !important; font-weight: 500 !important;">
-        <strong style="color: black !important;">⚠️ Disclaimer:</strong> This is a <strong style="color: black !important; background: rgba(255, 193, 7, 0.3) !important; padding: 2px 4px; border-radius: 3px;">demo application (Work in Progress)</strong> and does not constitute legal advice.
+<style>
+.disclaimer-box {
+    text-align: center;
+    margin: 20px auto;
+    padding: 15px 20px;
+    max-width: 800px;
+    background: #fff3cd !important;
+    border: 2px solid #ffc107 !important;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.disclaimer-box p {
+    color: #000000 !important;
+    margin: 0;
+}
+.disclaimer-box strong {
+    color: #000000 !important;
+}
+</style>
+<div class="disclaimer-box">
+    <p style="font-size: 0.9em; font-weight: 500; margin-bottom: 8px;">
+        <strong>⚠️ Disclaimer:</strong> This is a <strong style="background: rgba(255, 193, 7, 0.3); padding: 2px 4px; border-radius: 3px;">demo application (Work in Progress)</strong> and does not constitute legal advice.
     </p>
-    <p style="margin: 8px 0 0 0; font-size: 0.85em; color: black !important; line-height: 1.4;">
+    <p style="font-size: 0.85em; line-height: 1.4;">
         Always consult with qualified legal professionals before making compliance decisions based on AI outputs.
     </p>
 </div>

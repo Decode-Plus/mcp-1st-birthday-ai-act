@@ -4,6 +4,9 @@
  * 
  * Uses the AI SDK MCP client to connect to the EU AI Act MCP server
  * and retrieve tools dynamically.
+ * 
+ * Environment Variable:
+ * - AI_MODEL: "gpt-5" | "grok-4-1" (default: "gpt-5")
  */
 
 import { xai } from "@ai-sdk/xai";
@@ -13,12 +16,36 @@ import { Experimental_StdioMCPTransport as StdioMCPTransport } from "@ai-sdk/mcp
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { SYSTEM_PROMPT } from "./prompts.js";
+import { openai } from "@ai-sdk/openai";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Path to the built MCP server
 const MCP_SERVER_PATH = resolve(__dirname, "../../../../packages/eu-ai-act-mcp/dist/index.js");
+
+/**
+ * Get the AI model based on AI_MODEL environment variable
+ * Supports: "gpt-5" (OpenAI) or "grok-4-1" (xAI)
+ */
+function getModel() {
+  const modelEnv = process.env.AI_MODEL || "gpt-5";
+  
+  console.log(`[Agent] Using AI model: ${modelEnv}`);
+  
+  if (modelEnv === "grok-4-1") {
+    if (!process.env.XAI_API_KEY) {
+      throw new Error("XAI_API_KEY environment variable is required when using grok-4-1");
+    }
+    return xai("grok-4-1-fast-reasoning");
+  }
+  
+  // Default to GPT-5
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error("OPENAI_API_KEY environment variable is required when using gpt-5");
+  }
+  return openai("gpt-5");
+}
 
 /**
  * Create MCP client and retrieve tools
@@ -39,8 +66,7 @@ async function createMCPClientWithTools() {
  * Create EU AI Act compliance agent
  */
 export function createAgent() {
-  const model = xai("grok-4-1-fast-reasoning");
-  
+  const model = getModel();
   return {
     /**
      * Generate a single response
@@ -84,14 +110,77 @@ export function createAgent() {
         maxSteps: 15,
         // Log each step for debugging
         onStepFinish: async (step) => {
-          console.log(`[Agent] Step finished:`, {
+          console.log(`\n[Agent] Step finished:`, {
             stepType: step.stepType,
             toolCalls: step.toolCalls?.map(t => t.toolName) || [],
             hasText: !!step.text,
           });
+          
+          // Output tool results with detailed information
+          if (step.toolResults && step.toolResults.length > 0) {
+            for (const toolResult of step.toolResults) {
+              console.log(`\n📋 Tool Result: ${toolResult.toolName}`);
+              console.log("─".repeat(50));
+              
+              try {
+                const result = typeof toolResult.result === 'string' 
+                  ? JSON.parse(toolResult.result) 
+                  : toolResult.result;
+                
+                // Handle assess_compliance results specially to show documentation
+                if (toolResult.toolName === 'assess_compliance' && result) {
+                  if (result.assessment) {
+                    console.log(`📊 Compliance Score: ${result.assessment.overallScore}/100`);
+                    console.log(`⚠️  Risk Level: ${result.assessment.riskLevel}`);
+                    console.log(`🔍 Gaps Found: ${result.assessment.gaps?.length || 0}`);
+                    console.log(`💡 Recommendations: ${result.assessment.recommendations?.length || 0}`);
+                  }
+                  
+                  // Show documentation templates
+                  if (result.documentation) {
+                    console.log(`\n📄 Documentation Templates Generated:`);
+                    const docs = result.documentation;
+                    if (docs.riskManagementTemplate) console.log("   ✓ Risk Management System (Article 9)");
+                    if (docs.technicalDocumentation) console.log("   ✓ Technical Documentation (Article 11)");
+                    if (docs.conformityAssessment) console.log("   ✓ Conformity Assessment (Article 43)");
+                    if (docs.transparencyNotice) console.log("   ✓ Transparency Notice (Article 50)");
+                    if (docs.qualityManagementSystem) console.log("   ✓ Quality Management System (Article 17)");
+                    if (docs.humanOversightProcedure) console.log("   ✓ Human Oversight Procedure (Article 14)");
+                    if (docs.dataGovernancePolicy) console.log("   ✓ Data Governance Policy (Article 10)");
+                    if (docs.incidentReportingProcedure) console.log("   ✓ Incident Reporting Procedure");
+                  }
+                  
+                  if (result.metadata) {
+                    console.log(`\n🤖 Model Used: ${result.metadata.modelUsed}`);
+                  }
+                } else if (toolResult.toolName === 'discover_ai_services' && result) {
+                  // Show AI systems discovery summary
+                  if (result.riskSummary) {
+                    console.log(`🤖 Total Systems: ${result.riskSummary.totalCount}`);
+                    console.log(`   High-Risk: ${result.riskSummary.highRiskCount}`);
+                    console.log(`   Limited-Risk: ${result.riskSummary.limitedRiskCount}`);
+                    console.log(`   Minimal-Risk: ${result.riskSummary.minimalRiskCount}`);
+                  }
+                } else if (toolResult.toolName === 'discover_organization' && result) {
+                  // Show organization discovery summary
+                  if (result.organization) {
+                    console.log(`🏢 Organization: ${result.organization.name}`);
+                    console.log(`📍 Sector: ${result.organization.sector}`);
+                    console.log(`🌍 EU Presence: ${result.organization.euPresence}`);
+                  }
+                }
+              } catch {
+                // If not JSON, just show raw result summary
+                const resultStr = String(toolResult.result);
+                console.log(`Result: ${resultStr.substring(0, 200)}${resultStr.length > 200 ? '...' : ''}`);
+              }
+              
+              console.log("─".repeat(50));
+            }
+          }
         },
         onFinish: async () => {
-          console.log("[Agent] Stream finished, closing MCP client");
+          console.log("\n[Agent] Stream finished, closing MCP client");
           await client.close();
         },
         onError: async (error) => {

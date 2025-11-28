@@ -2,11 +2,14 @@
  * Compliance Assessment Tool
  * Implements EU AI Act compliance analysis using AI-powered assessment
  * 
- * Uses xAI Grok 4 via Vercel AI SDK to analyze:
+ * Uses xAI Grok 4 or OpenAI GPT-5 via Vercel AI SDK to analyze:
  * - Gap analysis against AI Act requirements
  * - Risk-specific compliance checklists
  * - Draft documentation templates
  * - Remediation recommendations
+ * 
+ * Environment Variable:
+ * - AI_MODEL: "gpt-5" | "grok-4-1" (default: "grok-4-1")
  * 
  * Research Integration:
  * - EU AI Act Regulation (EU) 2024/1689
@@ -19,6 +22,7 @@
  */
 
 import { xai } from "@ai-sdk/xai";
+import { openai } from "@ai-sdk/openai";
 import { generateText } from "ai";
 import type {
   OrganizationProfile,
@@ -31,15 +35,27 @@ import type {
 } from "../types/index.js";
 
 /**
- * Get the xAI Grok 4 model instance
+ * Get the AI model based on AI_MODEL environment variable
+ * Supports: "gpt-5" (OpenAI) or "grok-4-1" (xAI)
  */
 function getModel() {
-  const apiKey = process.env.XAI_API_KEY;
+  const modelEnv = process.env.AI_MODEL || "grok-4-1";
   
-  if (!apiKey) {
-    throw new Error("XAI_API_KEY environment variable is required for compliance assessment");
+  console.error(`[assess_compliance] Using AI model: ${modelEnv}`);
+  
+  if (modelEnv === "gpt-5") {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      throw new Error("OPENAI_API_KEY environment variable is required when using gpt-5");
+    }
+    return openai("gpt-5");
   }
   
+  // Default to Grok-4-1
+  const apiKey = process.env.XAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("XAI_API_KEY environment variable is required when using grok-4-1");
+  }
   return xai("grok-4-1-fast-reasoning");
 }
 
@@ -525,6 +541,10 @@ export async function assessCompliance(
   // Use AI-assessed score if available, otherwise use calculated
   const finalScore = assessmentData.overallScore || calculatedScore;
   
+  // Determine which model was used for metadata
+  const modelEnv = process.env.AI_MODEL || "grok-4-1";
+  const modelUsed = modelEnv === "gpt-5" ? "openai-gpt-5" : "xai-grok-4-1-fast-reasoning";
+  
   // Build response
   const response: ComplianceAssessmentResponse = {
     assessment: {
@@ -539,7 +559,7 @@ export async function assessCompliance(
     metadata: {
       assessmentDate: now,
       assessmentVersion: "1.0.0",
-      modelUsed: "xai-grok-4-1-fast-reasoning",
+      modelUsed,
       organizationAssessed: organizationContext?.organization.name,
       systemsAssessed: aiServicesContext?.systems.map(s => s.system.name) || [],
       focusAreas: focusAreas || [],
@@ -548,9 +568,24 @@ export async function assessCompliance(
   
   console.error("\n" + "=".repeat(60));
   console.error("✅ Compliance Assessment Complete");
+  console.error(`🤖 Model Used: ${modelUsed}`);
   console.error(`📊 Final Score: ${finalScore}/100`);
   console.error(`⚠️  Total Gaps: ${assessmentData.gaps.length}`);
   console.error(`💡 Recommendations: ${assessmentData.recommendations.length}`);
+  
+  // Output documentation template summary
+  if (documentation) {
+    console.error("\n📄 Documentation Templates Generated:");
+    if (documentation.riskManagementTemplate) console.error("   ✓ Risk Management System Template (Article 9)");
+    if (documentation.technicalDocumentation) console.error("   ✓ Technical Documentation Template (Article 11/Annex IV)");
+    if (documentation.conformityAssessment) console.error("   ✓ Conformity Assessment Template (Article 43)");
+    if (documentation.transparencyNotice) console.error("   ✓ Transparency Notice Template (Article 50)");
+    if (documentation.qualityManagementSystem) console.error("   ✓ Quality Management System Template (Article 17)");
+    if (documentation.humanOversightProcedure) console.error("   ✓ Human Oversight Procedure Template (Article 14)");
+    if (documentation.dataGovernancePolicy) console.error("   ✓ Data Governance Policy Template (Article 10)");
+    if (documentation.incidentReportingProcedure) console.error("   ✓ Incident Reporting Procedure Template");
+  }
+  
   console.error("=".repeat(60) + "\n");
   
   return response;
