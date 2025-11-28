@@ -129,6 +129,30 @@ app.post("/api/chat", async (req, res) => {
       return res.status(400).json({ error: "Message is required" });
     }
 
+    // Read model configuration from headers (set by Gradio UI)
+    const modelHeader = req.headers["x-ai-model"] as string;
+    const openaiKeyHeader = req.headers["x-openai-api-key"] as string;
+    const xaiKeyHeader = req.headers["x-xai-api-key"] as string;
+    const anthropicKeyHeader = req.headers["x-anthropic-api-key"] as string;
+
+    // Set environment variables for this request if provided via headers
+    if (modelHeader) {
+      process.env.AI_MODEL = modelHeader;
+      console.log(`[API] Model set via header: ${modelHeader}`);
+    }
+    if (openaiKeyHeader) {
+      process.env.OPENAI_API_KEY = openaiKeyHeader;
+      console.log(`[API] OpenAI API key set via header`);
+    }
+    if (xaiKeyHeader) {
+      process.env.XAI_API_KEY = xaiKeyHeader;
+      console.log(`[API] xAI API key set via header`);
+    }
+    if (anthropicKeyHeader) {
+      process.env.ANTHROPIC_API_KEY = anthropicKeyHeader;
+      console.log(`[API] Anthropic API key set via header`);
+    }
+
     // Set headers for streaming
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
@@ -138,7 +162,7 @@ app.post("/api/chat", async (req, res) => {
     // Send user message confirmation immediately
     res.write(`data: ${JSON.stringify({ type: "user_message", content: message })}\n\n`);
 
-    // Create agent instance
+    // Create agent instance (will use the env vars set above)
     const agent = createAgent();
 
     // Convert history to messages format
@@ -374,9 +398,10 @@ After assess_compliance returns, provide a human-readable summary of the complia
           summary += `### Compliance by EU AI Act Article\n\n`;
           summary += `| Article | Status | Issues |\n`;
           summary += `|---------|--------|--------|\n`;
-          for (const [article, status] of Object.entries(assess.complianceByArticle)) {
-            const icon = status.compliant ? "✅" : "❌";
-            const issues = status.gaps?.length > 0 ? status.gaps.length + " gap(s)" : "None";
+          for (const [article, statusData] of Object.entries(assess.complianceByArticle)) {
+            const articleStatus = statusData as { compliant: boolean; gaps?: string[] };
+            const icon = articleStatus.compliant ? "✅" : "❌";
+            const issues = articleStatus.gaps?.length ? articleStatus.gaps.length + " gap(s)" : "None";
             summary += `| ${article} | ${icon} | ${issues} |\n`;
           }
           summary += `\n`;
@@ -522,12 +547,17 @@ After assess_compliance returns, provide a human-readable summary of the complia
       }
       
       // ================== FOOTER ==================
+      const modelUsed = assessData?.metadata?.modelUsed || process.env.AI_MODEL || "Unknown";
+      const modelDisplayName = modelUsed.includes("gpt") ? "OpenAI GPT-5" : 
+                                modelUsed.includes("claude") ? "Anthropic Claude 4.5" : 
+                                modelUsed.includes("grok") ? "xAI Grok-4" : modelUsed;
+      
       summary += `---\n\n`;
       summary += `### ℹ️ About This Report\n\n`;
       summary += `This compliance report was generated using:\n`;
       summary += `- **Organization Discovery:** Tavily AI-powered research\n`;
       summary += `- **AI Systems Discovery:** Automated system classification per Annex III\n`;
-      summary += `- **Compliance Assessment:** xAI Grok-4 analysis against EU AI Act requirements\n\n`;
+      summary += `- **Compliance Assessment:** ${modelDisplayName} analysis against EU AI Act requirements\n\n`;
       summary += `*Report generated on ${new Date().toISOString()}*\n\n`;
       summary += `**Disclaimer:** This report is for informational purposes only and does not constitute legal advice. Consult with qualified legal professionals for official compliance guidance.\n`;
       

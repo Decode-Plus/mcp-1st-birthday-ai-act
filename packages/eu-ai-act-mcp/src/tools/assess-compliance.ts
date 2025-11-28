@@ -2,14 +2,19 @@
  * Compliance Assessment Tool
  * Implements EU AI Act compliance analysis using AI-powered assessment
  * 
- * Uses xAI Grok 4 or OpenAI GPT-5 via Vercel AI SDK to analyze:
+ * Uses xAI Grok 4, OpenAI GPT-5, or Anthropic Claude 4.5 via Vercel AI SDK to analyze:
  * - Gap analysis against AI Act requirements
  * - Risk-specific compliance checklists
  * - Draft documentation templates
  * - Remediation recommendations
  * 
  * Environment Variable:
- * - AI_MODEL: "gpt-5" | "grok-4-1" (default: "grok-4-1")
+ * - AI_MODEL: "gpt-5" | "grok-4-1" | "claude-4.5" (default: "grok-4-1")
+ * 
+ * Supported Models:
+ * - gpt-5: OpenAI GPT-5 (requires OPENAI_API_KEY)
+ * - grok-4-1: xAI Grok 4.1 Fast Reasoning (requires XAI_API_KEY)
+ * - claude-4.5: Anthropic Claude Sonnet 4.5 (requires ANTHROPIC_API_KEY)
  * 
  * Research Integration:
  * - EU AI Act Regulation (EU) 2024/1689
@@ -23,6 +28,7 @@
 
 import { xai } from "@ai-sdk/xai";
 import { openai } from "@ai-sdk/openai";
+import { anthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
 import type {
   OrganizationProfile,
@@ -36,7 +42,7 @@ import type {
 
 /**
  * Get the AI model based on AI_MODEL environment variable
- * Supports: "gpt-5" (OpenAI) or "grok-4-1" (xAI)
+ * Supports: "gpt-5" (OpenAI), "grok-4-1" (xAI), or "claude-4.5" (Anthropic)
  */
 function getModel() {
   const modelEnv = process.env.AI_MODEL || "grok-4-1";
@@ -49,6 +55,14 @@ function getModel() {
       throw new Error("OPENAI_API_KEY environment variable is required when using gpt-5");
     }
     return openai("gpt-5");
+  }
+  
+  if (modelEnv === "claude-4.5") {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      throw new Error("ANTHROPIC_API_KEY environment variable is required when using claude-4.5");
+    }
+    return anthropic("claude-sonnet-4-5-20250514");
   }
   
   // Default to Grok-4-1
@@ -543,7 +557,11 @@ export async function assessCompliance(
   
   // Determine which model was used for metadata
   const modelEnv = process.env.AI_MODEL || "grok-4-1";
-  const modelUsed = modelEnv === "gpt-5" ? "openai-gpt-5" : "xai-grok-4-1-fast-reasoning";
+  const modelUsed = modelEnv === "gpt-5" 
+    ? "openai-gpt-5" 
+    : modelEnv === "claude-4.5"
+    ? "anthropic-claude-sonnet-4-5"
+    : "xai-grok-4-1-fast-reasoning";
   
   // Build response
   const response: ComplianceAssessmentResponse = {

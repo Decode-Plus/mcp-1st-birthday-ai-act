@@ -2,7 +2,7 @@
 """
 EU AI Act Compliance Agent - Gradio UI
 Interactive web interface for EU AI Act compliance assessment
-With MCP tool call visualization
+With MCP tool call visualization and multi-model support
 """
 
 import gradio as gr
@@ -11,7 +11,7 @@ import requests
 import json
 import os
 from pathlib import Path
-from typing import List, Generator
+from typing import List, Generator, Optional
 from dotenv import load_dotenv
 
 # Load environment variables from root .env file
@@ -21,6 +21,33 @@ load_dotenv(ROOT_DIR / ".env")
 # API Configuration
 API_URL = os.getenv("API_URL", "http://localhost:3001")
 API_TIMEOUT = 120  # seconds - increased for tool calls
+
+# Model Configuration
+AVAILABLE_MODELS = {
+    "gpt-5": {
+        "name": "GPT-5 (OpenAI)",
+        "api_key_env": "OPENAI_API_KEY",
+        "description": "OpenAI's most advanced model"
+    },
+    "grok-4-1": {
+        "name": "Grok 4.1 (xAI)",
+        "api_key_env": "XAI_API_KEY",
+        "description": "xAI's fast reasoning model"
+    },
+    "claude-4.5": {
+        "name": "Claude 4.5 Sonnet (Anthropic)",
+        "api_key_env": "ANTHROPIC_API_KEY",
+        "description": "Anthropic's latest Claude model"
+    }
+}
+
+# Current model settings (can be updated via UI)
+current_model_settings = {
+    "model": os.getenv("AI_MODEL", "gpt-5"),
+    "openai_api_key": os.getenv("OPENAI_API_KEY", ""),
+    "xai_api_key": os.getenv("XAI_API_KEY", ""),
+    "anthropic_api_key": os.getenv("ANTHROPIC_API_KEY", "")
+}
 
 def format_tool_call(tool_name: str, args: dict) -> str:
     """Format a tool call for display"""
@@ -58,6 +85,25 @@ def format_thinking_indicator() -> str:
     """Format a thinking/processing indicator"""
     return "\n\n⏳ *Processing with MCP tools...*\n"
 
+def get_api_headers() -> dict:
+    """Get headers with model configuration for API requests"""
+    headers = {"Content-Type": "application/json"}
+    
+    # Pass model selection
+    if current_model_settings["model"]:
+        headers["X-AI-Model"] = current_model_settings["model"]
+    
+    # Pass appropriate API key based on model
+    model = current_model_settings["model"]
+    if model == "gpt-5" and current_model_settings["openai_api_key"]:
+        headers["X-OpenAI-API-Key"] = current_model_settings["openai_api_key"]
+    elif model == "grok-4-1" and current_model_settings["xai_api_key"]:
+        headers["X-XAI-API-Key"] = current_model_settings["xai_api_key"]
+    elif model == "claude-4.5" and current_model_settings["anthropic_api_key"]:
+        headers["X-Anthropic-API-Key"] = current_model_settings["anthropic_api_key"]
+    
+    return headers
+
 def chat_with_agent_streaming(message: str, history: list, initialized_history: list = None) -> Generator:
     """
     Send a message to the EU AI Act agent and stream the response with tool calls
@@ -92,10 +138,11 @@ def chat_with_agent_streaming(message: str, history: list, initialized_history: 
             else:
                 api_history.append({"role": msg.role, "content": msg.content})
         
-        # Make streaming request to API
+        # Make streaming request to API with model configuration headers
         response = requests.post(
             f"{API_URL}/api/chat",
             json={"message": message, "history": api_history},
+            headers=get_api_headers(),
             stream=True,
             timeout=API_TIMEOUT,
         )
@@ -276,6 +323,43 @@ with gr.Blocks(
         
         with gr.Column(scale=1):
             # Sidebar
+            gr.Markdown("### 🤖 Model Settings")
+            
+            model_dropdown = gr.Dropdown(
+                choices=[(v["name"], k) for k, v in AVAILABLE_MODELS.items()],
+                value=current_model_settings["model"],
+                label="AI Model",
+                info="Select the AI model to use"
+            )
+            
+            # API Key inputs (password fields)
+            with gr.Accordion("🔑 API Keys", open=False):
+                openai_key = gr.Textbox(
+                    label="OpenAI API Key",
+                    placeholder="sk-...",
+                    type="password",
+                    value=current_model_settings["openai_api_key"][:8] + "..." if current_model_settings["openai_api_key"] else "",
+                    info="Required for GPT-5"
+                )
+                xai_key = gr.Textbox(
+                    label="xAI API Key",
+                    placeholder="xai-...",
+                    type="password",
+                    value=current_model_settings["xai_api_key"][:8] + "..." if current_model_settings["xai_api_key"] else "",
+                    info="Required for Grok 4.1"
+                )
+                anthropic_key = gr.Textbox(
+                    label="Anthropic API Key",
+                    placeholder="sk-ant-...",
+                    type="password",
+                    value=current_model_settings["anthropic_api_key"][:8] + "..." if current_model_settings["anthropic_api_key"] else "",
+                    info="Required for Claude 4.5"
+                )
+                save_keys_btn = gr.Button("💾 Save Keys", variant="secondary", size="sm")
+                keys_status = gr.Markdown("")
+            
+            gr.Markdown("---")
+            
             gr.Markdown("### 📊 Quick Reference")
             
             gr.Markdown("""
@@ -351,6 +435,53 @@ with gr.Blocks(
 </div>
     """)
     
+    # Model and API key handlers
+    def update_model(model_value):
+        """Update the selected model"""
+        current_model_settings["model"] = model_value
+        model_info = AVAILABLE_MODELS.get(model_value, {})
+        return f"✅ Model set to: **{model_info.get('name', model_value)}**"
+    
+    def save_api_keys(openai_val, xai_val, anthropic_val):
+        """Save API keys (only if they look like new keys, not masked ones)"""
+        saved = []
+        
+        # Only update if it looks like a real key (not masked)
+        if openai_val and not openai_val.endswith("...") and len(openai_val) > 10:
+            current_model_settings["openai_api_key"] = openai_val
+            os.environ["OPENAI_API_KEY"] = openai_val
+            saved.append("OpenAI")
+        
+        if xai_val and not xai_val.endswith("...") and len(xai_val) > 10:
+            current_model_settings["xai_api_key"] = xai_val
+            os.environ["XAI_API_KEY"] = xai_val
+            saved.append("xAI")
+        
+        if anthropic_val and not anthropic_val.endswith("...") and len(anthropic_val) > 10:
+            current_model_settings["anthropic_api_key"] = anthropic_val
+            os.environ["ANTHROPIC_API_KEY"] = anthropic_val
+            saved.append("Anthropic")
+        
+        if saved:
+            return f"✅ Saved keys for: {', '.join(saved)}"
+        return "ℹ️ No new keys to save (enter full key values)"
+    
+    def get_current_model_status():
+        """Get current model and key status"""
+        model = current_model_settings["model"]
+        model_info = AVAILABLE_MODELS.get(model, {})
+        required_key = model_info.get("api_key_env", "")
+        
+        key_status = "❌ Missing"
+        if required_key == "OPENAI_API_KEY" and current_model_settings["openai_api_key"]:
+            key_status = "✅ Set"
+        elif required_key == "XAI_API_KEY" and current_model_settings["xai_api_key"]:
+            key_status = "✅ Set"
+        elif required_key == "ANTHROPIC_API_KEY" and current_model_settings["anthropic_api_key"]:
+            key_status = "✅ Set"
+        
+        return f"**Model:** {model_info.get('name', model)}\n**Key Status:** {key_status}"
+    
     # Event handlers - clear input immediately and stream response together
     def respond_and_clear(message: str, history: list):
         """Wrapper that yields (cleared_input, chat_history) tuples"""
@@ -359,9 +490,10 @@ with gr.Blocks(
             return
             
         # First yield: clear input and show loading immediately
+        model_name = AVAILABLE_MODELS.get(current_model_settings["model"], {}).get("name", current_model_settings["model"])
         initial_history = list(history) + [
             ChatMessage(role="user", content=message),
-            ChatMessage(role="assistant", content="⏳ *Thinking...*")
+            ChatMessage(role="assistant", content=f"⏳ *Thinking with {model_name}...*")
         ]
         yield "", initial_history
         
@@ -378,6 +510,12 @@ with gr.Blocks(
         [status, tools_info]
     )
     clear_btn.click(lambda: [], None, chatbot)
+    
+    # Model selection handler
+    model_dropdown.change(update_model, [model_dropdown], [keys_status])
+    
+    # Save keys handler
+    save_keys_btn.click(save_api_keys, [openai_key, xai_key, anthropic_key], [keys_status])
 
 # Launch the app
 if __name__ == "__main__":

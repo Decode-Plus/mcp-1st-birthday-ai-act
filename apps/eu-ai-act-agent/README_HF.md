@@ -13,8 +13,8 @@ tags:
   - compliance
   - legal-tech
   - gradio
-  - track-1-mcp-servers
-  - track-2-agentic-applications
+  - building-mcp-track-enterprise
+  - mcp-in-action-track-enterprise
 short_description: AI-powered EU AI Act compliance assessment with MCP tools
 ---
 
@@ -40,11 +40,11 @@ The **EU AI Act Compliance Agent** helps organizations understand and comply wit
 
 ### MCP Tools
 
-| Tool | Purpose | EU AI Act Articles |
-|------|---------|-------------------|
-| `discover_organization` | Profile organization & regulatory context | Art. 16, 22, 49 |
-| `discover_ai_services` | Classify AI systems by risk level | Art. 6, Annex III |
-| `assess_compliance` | Generate gap analysis & documentation | Art. 9-15, 43-50 |
+| Tool                    | Purpose                                   | EU AI Act Articles |
+| ----------------------- | ----------------------------------------- | ------------------ |
+| `discover_organization` | Profile organization & regulatory context | Art. 16, 22, 49    |
+| `discover_ai_services`  | Classify AI systems by risk level         | Art. 6, Annex III  |
+| `assess_compliance`     | Generate gap analysis & documentation     | Art. 9-15, 43-50   |
 
 ---
 
@@ -78,21 +78,21 @@ The **EU AI Act Compliance Agent** helps organizations understand and comply wit
 
 ## 🔐 Required Secrets
 
-| Secret | Required | Description |
-|--------|----------|-------------|
-| `XAI_API_KEY` | Yes | xAI API key |
+| Secret           | Required | Description             |
+| ---------------- | -------- | ----------------------- |
+| `XAI_API_KEY`    | Yes      | xAI API key             |
 | `TAVILY_API_KEY` | Optional | Tavily for web research |
 
 ---
 
 ## 📅 EU AI Act Timeline
 
-| Date | Milestone |
-|------|-----------|
-| Feb 2, 2025 | Prohibited AI ban |
-| Aug 2, 2025 | GPAI rules |
+| Date        | Milestone              |
+| ----------- | ---------------------- |
+| Feb 2, 2025 | Prohibited AI ban      |
+| Aug 2, 2025 | GPAI rules             |
 | Aug 2, 2026 | High-risk requirements |
-| Aug 2, 2027 | Full enforcement |
+| Aug 2, 2027 | Full enforcement       |
 
 ---
 
