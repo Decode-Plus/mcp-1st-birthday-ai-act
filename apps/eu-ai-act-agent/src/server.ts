@@ -199,13 +199,86 @@ app.post("/api/chat", async (req, res) => {
     
     console.log("First pass complete. Tools called:", [...toolsCalled]);
     
-    // Check if this looks like an organization analysis that needs assess_compliance
-    const hasOrgTools = toolsCalled.has("discover_organization") || toolsCalled.has("discover_ai_services");
-    const needsAssessment = hasOrgTools && !toolsCalled.has("assess_compliance");
+    // Check if this looks like an organization analysis that needs more tool calls
+    const hasOrgDiscovery = toolsCalled.has("discover_organization");
+    const hasAIServicesDiscovery = toolsCalled.has("discover_ai_services");
+    const hasAssessCompliance = toolsCalled.has("assess_compliance");
     
-    // If organization tools were called but assess_compliance wasn't, make a follow-up request
-    if (needsAssessment && !hasText) {
-      console.log("⚠️ Organization tools called but assess_compliance missing. Making follow-up request...");
+    // Need AI services discovery if we have org but not AI services
+    const needsAIServicesDiscovery = hasOrgDiscovery && !hasAIServicesDiscovery;
+    
+    // Need assessment if we have org/ai services but not assessment
+    const needsAssessment = (hasOrgDiscovery || hasAIServicesDiscovery) && !hasAssessCompliance;
+    
+    // If discover_ai_services wasn't called but discover_organization was, make a follow-up request for AI services
+    if (needsAIServicesDiscovery && !hasText) {
+      console.log("⚠️ discover_organization called but discover_ai_services missing. Making follow-up request...");
+      
+      const orgContext = toolResults.get("discover_organization");
+      
+      // List which tools were already called to prevent duplicates
+      const alreadyCalled = [...toolsCalled].join(", ");
+      
+      const aiServicesFollowUp = `
+You called discover_organization but SKIPPED discover_ai_services.
+
+## TOOLS ALREADY CALLED (DO NOT CALL AGAIN): ${alreadyCalled}
+
+## CRITICAL: Call discover_ai_services NOW (ONLY ONCE)
+
+Organization context is ready:
+- Name: ${orgContext?.organization?.name || "Unknown"}
+- Sector: ${orgContext?.organization?.sector || "Unknown"}
+
+Call discover_ai_services ONCE with:
+- organizationContext: Use the organization profile from discover_organization
+- systemNames: Extract any AI systems mentioned in the user's original query
+
+After discover_ai_services completes, call assess_compliance ONCE with BOTH contexts.
+
+⚠️ EACH TOOL MUST BE CALLED EXACTLY ONCE - NO DUPLICATES!`;
+      
+      const aiServicesMessages = [
+        ...messages,
+        {
+          role: "assistant",
+          content: `I have gathered the organization profile for ${orgContext?.organization?.name || "the organization"}. Now I will discover their AI systems.`,
+        },
+        {
+          role: "user",
+          content: aiServicesFollowUp,
+        },
+      ];
+      
+      console.log("Making follow-up request to call discover_ai_services...");
+      
+      const aiServicesResult = await agent.streamText({ messages: aiServicesMessages });
+      const aiServicesData = await processStreamEvents(aiServicesResult.fullStream, res);
+      
+      // Update tracking with follow-up results (only add new tools)
+      for (const [tool, result] of aiServicesData.toolResults) {
+        if (!toolResults.has(tool)) {
+          toolResults.set(tool, result);
+        }
+      }
+      for (const tool of aiServicesData.toolsCalled) {
+        toolsCalled.add(tool);
+      }
+      hasText = hasText || aiServicesData.hasText;
+      
+      // Update needsAssessment check
+      const nowHasAssessment = toolsCalled.has("assess_compliance");
+      if (!nowHasAssessment) {
+        console.log("discover_ai_services called but assess_compliance still missing...");
+      }
+    }
+    
+    // Recalculate if we still need assessment after AI services discovery
+    const stillNeedsAssessment = (toolsCalled.has("discover_organization") || toolsCalled.has("discover_ai_services")) && !toolsCalled.has("assess_compliance");
+    
+    // If organization/AI services tools were called but assess_compliance wasn't, make a follow-up request
+    if (stillNeedsAssessment && !hasText) {
+      console.log("⚠️ Organization/AI tools called but assess_compliance missing. Making follow-up request...");
       
       // Build context from tool results - these are the FULL results from the previous tools
       const orgContext = toolResults.get("discover_organization");
@@ -213,8 +286,12 @@ app.post("/api/chat", async (req, res) => {
       
       // Create a follow-up message that includes the COMPLETE tool results as JSON
       // This ensures the model has all the data needed to call assess_compliance correctly
+      const alreadyCalledTools = [...toolsCalled].join(", ");
+      
       const fullContextMessage = `
 I have received the complete results from the previous tools. Now I need you to call assess_compliance with the FULL context.
+
+## ⚠️ TOOLS ALREADY CALLED (DO NOT CALL AGAIN): ${alreadyCalledTools}
 
 ## COMPLETE ORGANIZATION CONTEXT (from discover_organization):
 \`\`\`json
@@ -227,12 +304,12 @@ ${JSON.stringify(aiServicesContext, null, 2)}
 \`\`\`
 
 ## INSTRUCTION:
-Call assess_compliance NOW with these EXACT parameters:
+Call assess_compliance ONCE with these EXACT parameters:
 - organizationContext: Pass the COMPLETE organization context JSON shown above (not a summary)
 - aiServicesContext: Pass the COMPLETE AI services context JSON shown above (not a summary)
 - generateDocumentation: true
 
-DO NOT simplify or summarize the context. Pass the FULL JSON objects exactly as provided above.
+⚠️ CALL assess_compliance EXACTLY ONCE - DO NOT call any tool that was already called!
 After assess_compliance returns, provide a human-readable summary of the compliance assessment.`;
       
       const followUpMessages = [

@@ -290,7 +290,7 @@ with gr.Blocks(
     title="🇪🇺 EU AI Act Compliance Agent",
 ) as demo:
     
-    # Custom CSS to hide Gradio footer
+    # Custom CSS to hide Gradio footer and style stop button
     gr.HTML("""
     <style>
     /* Hide Gradio's default footer */
@@ -298,6 +298,16 @@ with gr.Blocks(
     .gradio-container footer { display: none !important; }
     .footer { display: none !important; }
     [data-testid="footer"] { display: none !important; }
+    
+    /* Style the stop button */
+    button.stop {
+        background-color: #dc3545 !important;
+        border-color: #dc3545 !important;
+    }
+    button.stop:hover {
+        background-color: #c82333 !important;
+        border-color: #bd2130 !important;
+    }
     </style>
     """)
     
@@ -324,9 +334,10 @@ with gr.Blocks(
                 msg = gr.Textbox(
                     placeholder="Ask about EU AI Act compliance, risk classification, or documentation...",
                     show_label=False,
-                    scale=9,
+                    scale=8,
                 )
                 submit = gr.Button("Send", variant="primary", scale=1)
+                stop_btn = gr.Button("⏹ Stop", variant="stop", scale=1, visible=False)
             
             gr.Examples(
                 examples=get_example_queries(),
@@ -515,26 +526,59 @@ with gr.Blocks(
     
     # Event handlers - clear input immediately and stream response together
     def respond_and_clear(message: str, history: list):
-        """Wrapper that yields (cleared_input, chat_history) tuples"""
+        """Wrapper that yields (cleared_input, chat_history, stop_visible) tuples"""
         if not message.strip():
-            yield "", history
+            yield "", history, gr.update(visible=False)
             return
             
-        # First yield: clear input and show loading immediately
+        # First yield: clear input, show loading, and show stop button
         model_name = AVAILABLE_MODELS.get(current_model_settings["model"], {}).get("name", current_model_settings["model"])
         initial_history = list(history) + [
             ChatMessage(role="user", content=message),
             ChatMessage(role="assistant", content=f"⏳ *Thinking with {model_name}...*")
         ]
-        yield "", initial_history
+        yield "", initial_history, gr.update(visible=True)
         
-        # Then stream the actual response (pass initialized_history to avoid duplication)
+        # Stream the actual response (pass initialized_history to avoid duplication)
         for updated_history in chat_with_agent_streaming(message, history, initial_history):
-            yield "", updated_history
+            yield "", updated_history, gr.update(visible=True)
+        
+        # Final yield: hide stop button when done
+        yield "", updated_history, gr.update(visible=False)
+    
+    def stop_response(history: list):
+        """Stop the current response and add a stopped message"""
+        if history and len(history) > 0:
+            # Check if the last message is still loading/thinking
+            last_msg = history[-1]
+            if isinstance(last_msg, ChatMessage) and "⏳" in last_msg.content:
+                # Update the last message to show it was stopped
+                history[-1] = ChatMessage(
+                    role="assistant", 
+                    content=last_msg.content.replace("⏳", "⏹️") + "\n\n*— Execution stopped by user*"
+                )
+            elif isinstance(last_msg, ChatMessage):
+                # Append stopped message to existing content
+                history[-1] = ChatMessage(
+                    role="assistant",
+                    content=last_msg.content + "\n\n*— Execution stopped by user*"
+                )
+        # Return history and hide stop button
+        return history, gr.update(visible=False)
     
     # On submit/click: clear input immediately while streaming response
-    msg.submit(respond_and_clear, [msg, chatbot], [msg, chatbot])
-    submit.click(respond_and_clear, [msg, chatbot], [msg, chatbot])
+    # These events are cancellable by the stop button
+    submit_event = msg.submit(respond_and_clear, [msg, chatbot], [msg, chatbot, stop_btn])
+    click_event = submit.click(respond_and_clear, [msg, chatbot], [msg, chatbot, stop_btn])
+    
+    # Stop button cancels the streaming events and updates the chat
+    stop_btn.click(
+        fn=stop_response,
+        inputs=[chatbot],
+        outputs=[chatbot, stop_btn],
+        cancels=[submit_event, click_event]
+    )
+    
     refresh_btn.click(
         lambda: (check_api_status(), get_available_tools()), 
         None, 
