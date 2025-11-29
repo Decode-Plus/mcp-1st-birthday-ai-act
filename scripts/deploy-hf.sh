@@ -8,6 +8,11 @@ HF_SPACE="${HF_SPACE:-MCP-1st-Birthday/eu-ai-act-compliance-agent}"
 
 echo "🚀 Deploying to HF Spaces: $HF_SPACE"
 
+# Derive PUBLIC_URL from HF_SPACE (org/repo -> org-repo.hf.space)
+# Convert to lowercase and replace / with -
+PUBLIC_URL="https://$(echo "$HF_SPACE" | tr '[:upper:]' '[:lower:]' | tr '/' '-').hf.space"
+echo "📡 Public URL: $PUBLIC_URL"
+
 # Check HF CLI
 if ! command -v huggingface-cli &> /dev/null; then
     echo "Installing huggingface_hub..."
@@ -31,6 +36,11 @@ cd "$TEMP_DIR"
 # Move Space files to root (from apps/eu-ai-act-agent)
 cp apps/eu-ai-act-agent/Dockerfile ./
 cp apps/eu-ai-act-agent/README.md ./
+
+# Update PUBLIC_URL in Dockerfile to match the actual HF Space URL
+sed -i.bak "s|PUBLIC_URL=https://.*\.hf\.space|PUBLIC_URL=$PUBLIC_URL|g" Dockerfile
+rm -f Dockerfile.bak
+echo "✅ Updated PUBLIC_URL in Dockerfile"
 
 # Remove git and push to HF
 rm -rf .git

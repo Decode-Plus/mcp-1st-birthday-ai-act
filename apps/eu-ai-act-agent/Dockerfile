@@ -34,9 +34,12 @@ RUN uv venv $HOME/venv && \
     uv pip install --no-cache -r apps/eu-ai-act-agent/requirements.txt
 
 # Environment
+# API_URL: Internal communication between Gradio and API server (localhost works inside container)
+# PUBLIC_URL: External HF Spaces URL for links shown to users
 ENV NODE_ENV=production \
     PORT=3001 \
     API_URL=http://localhost:3001 \
+    PUBLIC_URL=https://mcp-1st-birthday-eu-ai-act-compliance-agent.hf.space \
     GRADIO_SERVER_NAME=0.0.0.0 \
     GRADIO_SERVER_PORT=7860 \
     GRADIO_SHARE=true \
@@ -44,12 +47,14 @@ ENV NODE_ENV=production \
     VIRTUAL_ENV=/home/node/venv \
     MCP_SERVER_PATH=/home/node/app/packages/eu-ai-act-mcp/dist/index.js
 
-EXPOSE 7860 7861
+# Set working directory to the agent app for CMD
+WORKDIR $HOME/app/apps/eu-ai-act-agent
 
-# Start API server + Gradio UI + ChatGPT App (MCP Server)
-CMD cd apps/eu-ai-act-agent && \
-    node dist/server.js & \
-    sleep 3 && \
-    python src/chatgpt_app.py & \
+EXPOSE 7860
+
+# Start API server + Gradio UI (with MCP server built-in)
+# MCP server is now integrated into the main Gradio app on port 7860
+CMD node dist/server.js & \
+    sleep 2 && \
     python src/gradio_app.py
 

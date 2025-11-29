@@ -26,6 +26,7 @@ load_dotenv(ROOT_DIR / ".env")
 
 # API Configuration - connects to existing Node.js API server
 API_URL = os.getenv("API_URL", "http://localhost:3001")
+PUBLIC_URL = os.getenv("PUBLIC_URL", "")  # HF Spaces public URL (empty for local dev)
 API_TIMEOUT = 600  # seconds
 
 
@@ -906,24 +907,46 @@ def compliance_widget():
 # GRADIO UI - For testing tools and displaying resource code
 # ============================================================================
 
+# Build header based on environment
+_is_production = bool(PUBLIC_URL)
+if _is_production:
+    _env_info = f"""
+        <div style="background: rgba(76, 175, 80, 0.2); border: 1px solid rgba(76, 175, 80, 0.4); border-radius: 8px; padding: 12px; margin-top: 15px;">
+            <p style="margin: 0; font-size: 0.85em;">🌐 <strong>Production Mode</strong></p>
+            <p style="margin: 5px 0 0 0; font-size: 0.8em; opacity: 0.9;">Space URL: <a href="{PUBLIC_URL}" target="_blank" style="color: #90CAF9;">{PUBLIC_URL}</a></p>
+            <p style="margin: 5px 0 0 0; font-size: 0.75em; opacity: 0.7;">⚠️ MCP URL format: <code>https://xxx.gradio.live/gradio_api/mcp/</code></p>
+        </div>
+    """
+else:
+    _env_info = """
+        <div style="background: rgba(33, 150, 243, 0.2); border: 1px solid rgba(33, 150, 243, 0.4); border-radius: 8px; padding: 12px; margin-top: 15px;">
+            <p style="margin: 0; font-size: 0.85em;">🛠️ <strong>Local Development</strong></p>
+            <p style="margin: 5px 0 0 0; font-size: 0.8em; opacity: 0.9;">MCP Server URL will appear in terminal when app starts</p>
+            <p style="margin: 5px 0 0 0; font-size: 0.75em; opacity: 0.7;">Format: <code>https://xxx.gradio.live/gradio_api/mcp/</code></p>
+        </div>
+    """
+
 with gr.Blocks(
     title="🇪🇺 EU AI Act - ChatGPT App",
 ) as demo:
     
-    gr.HTML("""
+    gr.HTML(f"""
         <div style="text-align: center; padding: 20px 0; background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%); border-radius: 12px; color: white; margin-bottom: 20px;">
             <h1 style="margin: 0; font-size: 2em;">🇪🇺 EU AI Act Compliance</h1>
             <p style="margin: 10px 0 0 0; opacity: 0.9;">ChatGPT App powered by Gradio MCP</p>
             <p style="margin: 5px 0 0 0; font-size: 0.85em; opacity: 0.7;">by <a href="https://www.legitima.ai" target="_blank" style="color: #90CAF9;">Legitima.ai</a></p>
+            {_env_info}
         </div>
     """)
     
     gr.Markdown("""
     ## 🚀 How to Use in ChatGPT
     
-    1. **Start this app** with `share=True` (see command below)
+    1. **Get the MCP URL** from the terminal/Space logs  
+       ⚠️ **Important:** The URL must end with `/gradio_api/mcp/`  
+       Example: `https://xxx.gradio.live/gradio_api/mcp/`
     2. **Enable Developer Mode** in ChatGPT: Settings → Apps & Connectors → Advanced settings
-    3. **Create a Connector** with the MCP server URL from terminal
+    3. **Create a Connector** with the MCP server URL (choose "No authentication")
     4. **Chat with ChatGPT** using `@eu-ai-act` to access these tools
     
     ---
@@ -1037,21 +1060,106 @@ with gr.Blocks(
 # LAUNCH
 # ============================================================================
 
+# File to store the MCP URL for the main Gradio app to read
+MCP_URL_FILE = Path(__file__).parent / ".mcp_url"
+
+def save_mcp_url(url: str):
+    """Save the MCP URL to a file for the main Gradio app to read"""
+    try:
+        # Ensure parent directory exists
+        MCP_URL_FILE.parent.mkdir(parents=True, exist_ok=True)
+        MCP_URL_FILE.write_text(url)
+        print(f"\n✅ MCP URL saved to: {MCP_URL_FILE}")
+        print(f"   URL content: {url}")
+    except Exception as e:
+        print(f"⚠️ Could not save MCP URL: {e}")
+        import traceback
+        traceback.print_exc()
+
 if __name__ == "__main__":
+    import time
+    
+    is_production = bool(PUBLIC_URL)
+    
     print("\n" + "=" * 70)
-    print("🇪🇺 EU AI Act Compliance - ChatGPT App")
+    print("🇪🇺 EU AI Act Compliance - ChatGPT App (MCP Server)")
     print("=" * 70)
-    print("\n📖 Documentation: https://www.gradio.app/guides/building-chatgpt-apps-with-gradio")
+    
+    if is_production:
+        print(f"\n🌐 Environment: PRODUCTION (HF Spaces)")
+        print(f"✓ Public URL: {PUBLIC_URL}")
+    else:
+        print(f"\n🛠️  Environment: LOCAL DEVELOPMENT")
+    
     print(f"\n📡 API Server: {API_URL}")
-    print("   Make sure the Node.js API is running: pnpm dev")
+    print("\n📖 ChatGPT Integration:")
+    print("   1. The MCP server URL will be printed below (gradio.live URL)")
+    print("   2. Enable 'Developer Mode' in ChatGPT Settings → Apps & Connectors")
+    print("   3. Create a connector with the MCP URL")
+    print("   4. Use @eu-ai-act in ChatGPT to access tools")
     print("\n🚀 Starting Gradio MCP Server...")
     print("=" * 70)
     
-    demo.launch(
-        server_name=os.getenv("CHATGPT_APP_SERVER_NAME", "0.0.0.0"),
-        server_port=int(os.getenv("CHATGPT_APP_SERVER_PORT", "7861")),
-        share=True,  # Required for ChatGPT Apps - creates public URL
-        mcp_server=True,  # Enable MCP server for ChatGPT integration
-        show_error=True,
-    )
+    # Launch the app - DO NOT use prevent_thread_lock as it can cause issues
+    # Instead, launch normally and the app will block (which is what we want)
+    try:
+        # First, launch without blocking to get the share URL
+        result = demo.launch(
+            server_name=os.getenv("CHATGPT_APP_SERVER_NAME", "0.0.0.0"),
+            server_port=int(os.getenv("CHATGPT_APP_SERVER_PORT", "7861")),
+            share=True,  # Required for ChatGPT Apps - creates public gradio.live URL
+            mcp_server=True,  # Enable MCP server for ChatGPT integration
+            show_error=True,
+            prevent_thread_lock=True,  # Need this to save URL first
+        )
+        
+        print(f"\n[DEBUG] Launch result type: {type(result)}")
+        
+        # Handle different return formats
+        share_url = None
+        if isinstance(result, tuple):
+            if len(result) >= 3:
+                app, local_url, share_url = result[0], result[1], result[2]
+            elif len(result) >= 2:
+                app, share_url = result[0], result[1]
+        elif hasattr(result, 'share_url'):
+            share_url = result.share_url
+        
+        # Also check demo object for share URL
+        if not share_url and hasattr(demo, 'share_url'):
+            share_url = demo.share_url
+            print(f"[DEBUG] Got share_url from demo object: {share_url}")
+        
+        # Construct the MCP server URL (must end with /gradio_api/mcp/)
+        if share_url:
+            # Remove trailing slash if present, then add the MCP path
+            base_url = share_url.rstrip('/')
+            mcp_url = f"{base_url}/gradio_api/mcp/"
+            
+            print(f"\n" + "=" * 70)
+            print(f"🔗 MCP SERVER URL (use this in ChatGPT):")
+            print(f"")
+            print(f"   {mcp_url}")
+            print(f"")
+            print(f"   Base Gradio URL: {share_url}")
+            print("=" * 70 + "\n")
+            save_mcp_url(mcp_url)
+        else:
+            print("\n⚠️ No share URL returned from Gradio launch")
+            print("   The MCP server is running but public URL not available")
+            save_mcp_url("MCP server running - check logs for URL")
+        
+    except Exception as e:
+        print(f"\n❌ Error launching Gradio: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    # Keep the server running - this is critical!
+    print("\n🔄 MCP Server is running. Press Ctrl+C to stop.")
+    print("   The server must keep running for ChatGPT to connect.")
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("\n👋 Shutting down MCP server...")
 

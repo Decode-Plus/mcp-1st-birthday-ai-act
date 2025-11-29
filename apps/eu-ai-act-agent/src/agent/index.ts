@@ -5,16 +5,16 @@
  * Uses the AI SDK MCP client to connect to the EU AI Act MCP server
  * and retrieve tools dynamically.
  * 
- * Environment Variable:
- * - AI_MODEL: "gpt-oss" | "claude-4.5" | "claude-opus" | "gpt-5" | "grok-4-1" | "gemini-3" (default: "gpt-oss")
+ * IMPORTANT: API keys are passed directly from Gradio UI via request headers.
+ * NEVER read API keys from environment variables!
  * 
  * Supported Models:
- * - gpt-oss: OpenAI GPT-OSS 20B via Modal.com (FREE - requires MODAL_ENDPOINT_URL) - DEFAULT
- * - claude-4.5: Anthropic Claude Sonnet 4.5 (requires ANTHROPIC_API_KEY)
- * - claude-opus: Anthropic Claude Opus 4 (requires ANTHROPIC_API_KEY)
- * - gpt-5: OpenAI GPT-5 (requires OPENAI_API_KEY)
- * - grok-4-1: xAI Grok 4.1 Fast Reasoning (requires XAI_API_KEY)
- * - gemini-3: Google Gemini 3 Pro (requires GOOGLE_GENERATIVE_AI_API_KEY)
+ * - gpt-oss: OpenAI GPT-OSS 20B via Modal.com (FREE - no API key needed!) - DEFAULT
+ * - claude-4.5: Anthropic Claude Sonnet 4.5 (user provides API key)
+ * - claude-opus: Anthropic Claude Opus 4 (user provides API key)
+ * - gpt-5: OpenAI GPT-5 (user provides API key)
+ * - grok-4-1: xAI Grok 4.1 Fast Reasoning (user provides API key)
+ * - gemini-3: Google Gemini 3 Pro (user provides API key)
  */
 
 import { generateText, stepCountIs, streamText } from "ai";
@@ -23,15 +23,25 @@ import { Experimental_StdioMCPTransport as StdioMCPTransport } from "@ai-sdk/mcp
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { SYSTEM_PROMPT, SYSTEM_PROMPT_GPT_OSS } from "./prompts.js";
-import { getModel } from "@eu-ai-act/mcp-server";
+import { getModel, type ApiKeys } from "@eu-ai-act/mcp-server";
+
+// Re-export ApiKeys type for server.ts
+export type { ApiKeys };
+
+/**
+ * Agent configuration passed from server
+ */
+export interface AgentConfig {
+  modelName: string;
+  apiKeys: ApiKeys;
+}
 
 /**
  * Get the appropriate system prompt based on the model
  * GPT-OSS uses a shorter prompt to fit within context limits
  */
-function getSystemPrompt(): string {
-  const modelEnv = process.env.AI_MODEL || "gpt-oss";
-  if (modelEnv === "gpt-oss") {
+function getSystemPrompt(modelName: string): string {
+  if (modelName === "gpt-oss") {
     console.log("[Agent] Using shorter system prompt for GPT-OSS");
     return SYSTEM_PROMPT_GPT_OSS;
   }
@@ -201,18 +211,28 @@ function validateToolResult(toolName: string, result: any): any {
 
 /**
  * Create MCP client and retrieve tools
- * Passes current environment variables (including AI_MODEL) to the MCP server
+ * Passes API keys to the MCP server for tool execution
  */
-async function createMCPClientWithTools() {
-  // Pass ALL current environment variables to the MCP server child process
-  // This ensures AI_MODEL and API keys set by the server are available to MCP tools
-  // Filter out undefined values to satisfy Record<string, string> type
-  const env: Record<string, string> = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (value !== undefined) {
-      env[key] = value;
-    }
+async function createMCPClientWithTools(apiKeys: ApiKeys) {
+  // Pass API keys to MCP server child process via environment
+  // MCP tools need these for Tavily research and AI model calls
+  const env: Record<string, string> = {
+    // Only pass MCP_SERVER_PATH and NODE_ENV, plus API keys
+    NODE_ENV: process.env.NODE_ENV || "production",
+  };
+  
+  // Pass MCP server path if set
+  if (process.env.MCP_SERVER_PATH) {
+    env.MCP_SERVER_PATH = process.env.MCP_SERVER_PATH;
   }
+  
+  // Pass API keys from user (via Gradio UI) to MCP server
+  // These are used by MCP tools for Tavily research and AI model calls
+  if (apiKeys.openaiApiKey) env.OPENAI_API_KEY = apiKeys.openaiApiKey;
+  if (apiKeys.anthropicApiKey) env.ANTHROPIC_API_KEY = apiKeys.anthropicApiKey;
+  if (apiKeys.googleApiKey) env.GOOGLE_GENERATIVE_AI_API_KEY = apiKeys.googleApiKey;
+  if (apiKeys.xaiApiKey) env.XAI_API_KEY = apiKeys.xaiApiKey;
+  if (apiKeys.modalEndpointUrl) env.MODAL_ENDPOINT_URL = apiKeys.modalEndpointUrl;
   
   const transport = new StdioMCPTransport({
     command: "node",
@@ -223,29 +243,32 @@ async function createMCPClientWithTools() {
   const client = await createMCPClient({ transport });
   const tools = await client.tools();
   
-  console.log(`[Agent] MCP client created with AI_MODEL=${process.env.AI_MODEL}`);
+  console.log(`[Agent] MCP client created`);
 
   return { client, tools };
 }
 
 /**
  * Create EU AI Act compliance agent
+ * 
+ * @param config - Agent configuration with model name and API keys from Gradio UI
  */
-export function createAgent() {
+export function createAgent(config: AgentConfig) {
+  const { modelName, apiKeys } = config;
+  
   // Log the model being used
-  const modelEnv = process.env.AI_MODEL || "gpt-oss";
-  console.log(`[Agent] Creating agent with AI_MODEL=${modelEnv}`);
-  const model = getModel(undefined, "agent");
+  console.log(`[Agent] Creating agent with model: ${modelName}`);
+  const model = getModel(modelName, apiKeys, "agent");
   console.log(`[Agent] Model instance created: ${model.constructor.name}`);
   return {
     /**
      * Generate a single response
      */
     async generateText(params: { messages: any[] }) {
-      const { client, tools } = await createMCPClientWithTools();
+      const { client, tools } = await createMCPClientWithTools(apiKeys);
 
       try {
-        const systemPrompt = getSystemPrompt();
+        const systemPrompt = getSystemPrompt(modelName);
         const result = await generateText({
           model,
           messages: [
@@ -376,8 +399,8 @@ export function createAgent() {
      * Stream a response with MCP tools
      */
     async streamText(params: { messages: any[] }) {
-      const { client, tools } = await createMCPClientWithTools();
-      const systemPrompt = getSystemPrompt();
+      const { client, tools } = await createMCPClientWithTools(apiKeys);
+      const systemPrompt = getSystemPrompt(modelName);
 
       const result = streamText({
         model,
@@ -513,7 +536,7 @@ export function createAgent() {
      * Get available tools from MCP server
      */
     async getTools() {
-      const { client, tools } = await createMCPClientWithTools();
+      const { client, tools } = await createMCPClientWithTools(apiKeys);
       const toolList = Object.entries(tools).map(([name, t]) => ({
         name,
         description: (t as any).description || "No description",

@@ -745,7 +745,7 @@ async function researchOrganizationWithAI(
   console.error("\n🤖 Using AI model fallback for organization research (Tavily not available)");
   
   const now = new Date().toISOString();
-  const model = getModel(undefined, "discover_organization");
+  const model = getModel(undefined, undefined, "discover_organization");
   
   // Check if it's a known enterprise company
   const isEnterprise = isKnownEnterpriseCompany(name);

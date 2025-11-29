@@ -682,7 +682,7 @@ export async function assessCompliance(
   }
   console.error("-".repeat(60));
   
-  const model = getModel(modelParam, "assess_compliance");
+  const model = getModel(modelParam, undefined, "assess_compliance");
   const now = new Date().toISOString();
   
   // Step 1: Generate compliance assessment using Grok 4

@@ -35,7 +35,7 @@ import {
 } from "./schemas/index.js";
 
 // Export shared utilities for external use
-export { getModel } from "./utils/model.js";
+export { getModel, type ApiKeys } from "./utils/model.js";
 
 // Export tool functions for direct API use (ChatGPT Apps, REST API, etc.)
 export { discoverOrganization, discoverAIServices, assessCompliance };

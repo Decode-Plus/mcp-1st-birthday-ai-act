@@ -34,6 +34,8 @@ app.use(cors({
 }));
 app.use(express.json());
 
+import { readFileSync, existsSync } from "fs";
+
 // Health check
 app.get("/health", (_req, res) => {
   res.json({ 
@@ -41,6 +43,21 @@ app.get("/health", (_req, res) => {
     service: "EU AI Act Compliance Agent",
     version: "0.1.0",
   });
+});
+
+// MCP URL endpoint - returns the gradio.live URL for ChatGPT integration
+app.get("/api/mcp-url", (_req, res) => {
+  try {
+    const mcpUrlFile = resolve(__dirname, ".mcp_url");
+    if (existsSync(mcpUrlFile)) {
+      const url = readFileSync(mcpUrlFile, "utf-8").trim();
+      res.json({ url, status: "ready" });
+    } else {
+      res.json({ url: null, status: "starting" });
+    }
+  } catch (error) {
+    res.json({ url: null, status: "error", error: String(error) });
+  }
 });
 
 /**
@@ -196,56 +213,31 @@ app.post("/api/chat", async (req, res) => {
       return res.status(400).json({ error: "Message is required" });
     }
 
-    // Read model selection from headers (set by Gradio UI)
-    const modelHeader = req.headers["x-ai-model"] as string;
+    // Read model selection and API keys from headers (set by Gradio UI)
+    // IMPORTANT: API keys are ONLY from user input via Gradio UI - NEVER from env vars!
+    const modelName = (req.headers["x-ai-model"] as string) || "gpt-oss";
     
-    // SECURITY: Only read user-provided keys from headers if they want to override
-    // Backend environment keys are the PRIMARY source and are NEVER exposed to frontend
-    const modalEndpointHeader = req.headers["x-modal-endpoint-url"] as string;
-    const openaiKeyHeader = req.headers["x-openai-api-key"] as string;
-    const xaiKeyHeader = req.headers["x-xai-api-key"] as string;
-    const anthropicKeyHeader = req.headers["x-anthropic-api-key"] as string;
-    const googleKeyHeader = req.headers["x-google-api-key"] as string;
+    // API keys from Gradio UI (stored in user's cookies)
+    const apiKeys = {
+      modalEndpointUrl: req.headers["x-modal-endpoint-url"] as string || undefined,
+      openaiApiKey: req.headers["x-openai-api-key"] as string || undefined,
+      xaiApiKey: req.headers["x-xai-api-key"] as string || undefined,
+      anthropicApiKey: req.headers["x-anthropic-api-key"] as string || undefined,
+      googleApiKey: req.headers["x-google-api-key"] as string || undefined,
+    };
+    
+    // Tavily API key (optional - for web research)
     const tavilyKeyHeader = req.headers["x-tavily-api-key"] as string;
-
-    // Set model selection if provided (default to gpt-oss for FREE model!)
-    if (modelHeader) {
-      process.env.AI_MODEL = modelHeader;
-      console.log(`[API] Model set via header: ${modelHeader} (overriding any env default)`);
-    } else if (!process.env.AI_MODEL) {
-      process.env.AI_MODEL = "gpt-oss";
-      console.log(`[API] Using default model: gpt-oss (FREE via Modal)`);
-    } else {
-      console.log(`[API] Using existing AI_MODEL from env: ${process.env.AI_MODEL}`);
-    }
-    
-    // Modal endpoint URL for GPT-OSS (FREE model)
-    if (modalEndpointHeader && modalEndpointHeader.length > 10) {
-      process.env.MODAL_ENDPOINT_URL = modalEndpointHeader;
-      console.log(`[API] Using user-provided Modal endpoint: ${modalEndpointHeader}`);
-    }
-    
-    // Only override env keys if user explicitly provides their own keys
-    // This allows users to use their own keys if they prefer
-    if (openaiKeyHeader && openaiKeyHeader.length > 10) {
-      process.env.OPENAI_API_KEY = openaiKeyHeader;
-      console.log(`[API] Using user-provided OpenAI API key`);
-    }
-    if (xaiKeyHeader && xaiKeyHeader.length > 10) {
-      process.env.XAI_API_KEY = xaiKeyHeader;
-      console.log(`[API] Using user-provided xAI API key`);
-    }
-    if (anthropicKeyHeader && anthropicKeyHeader.length > 10) {
-      process.env.ANTHROPIC_API_KEY = anthropicKeyHeader;
-      console.log(`[API] Using user-provided Anthropic API key`);
-    }
-    if (googleKeyHeader && googleKeyHeader.length > 10) {
-      process.env.GOOGLE_GENERATIVE_AI_API_KEY = googleKeyHeader;
-      console.log(`[API] Using user-provided Google API key`);
-    }
     if (tavilyKeyHeader && tavilyKeyHeader.length > 10) {
+      // Tavily is still read via env var by MCP tools for now
       process.env.TAVILY_API_KEY = tavilyKeyHeader;
-      console.log(`[API] Using user-provided Tavily API key`);
+    }
+    
+    console.log(`[API] Model: ${modelName}, API keys provided: ${Object.entries(apiKeys).filter(([_, v]) => v).map(([k]) => k).join(", ") || "none (GPT-OSS is FREE)"}`);
+    
+    // For GPT-OSS, use default Modal endpoint if not provided
+    if (modelName === "gpt-oss" && !apiKeys.modalEndpointUrl) {
+      apiKeys.modalEndpointUrl = "https://vasilis--gpt-oss-vllm-inference-serve.modal.run";
     }
 
     // Set headers for streaming
@@ -257,8 +249,8 @@ app.post("/api/chat", async (req, res) => {
     // Send user message confirmation immediately
     res.write(`data: ${JSON.stringify({ type: "user_message", content: message })}\n\n`);
 
-    // Create agent instance (will use the env vars set above)
-    const agent = createAgent();
+    // Create agent instance with model and API keys from Gradio UI
+    const agent = createAgent({ modelName, apiKeys });
 
     // Convert history to messages format
     let messages = history.map((msg: any) => ({
@@ -268,9 +260,7 @@ app.post("/api/chat", async (req, res) => {
 
     // For GPT-OSS (smaller model), limit history to avoid context overflow
     // GPT-OSS 20B has ~8K-16K context window, and our system prompt is ~3K tokens
-    // Use the model from header (set by Gradio UI), fallback to env var
-    const selectedModel = modelHeader || process.env.AI_MODEL || "gpt-oss";
-    const isGptOss = selectedModel === "gpt-oss";
+    const isGptOss = modelName === "gpt-oss";
     if (isGptOss && messages.length > 0) {
       // Limit to last 4 turns (8 messages) for GPT-OSS
       const MAX_HISTORY_MESSAGES = 8;
@@ -779,7 +769,11 @@ After assess_compliance returns, provide a human-readable summary of the complia
 // Tool status endpoint
 app.get("/api/tools", async (_req, res) => {
   try {
-    const agent = createAgent();
+    // Use default GPT-OSS (free, no API key needed) just to list tools
+    const agent = createAgent({ 
+      modelName: "gpt-oss", 
+      apiKeys: { modalEndpointUrl: "https://vasilis--gpt-oss-vllm-inference-serve.modal.run" } 
+    });
     const tools = await agent.getTools();
     
     res.json({
@@ -874,6 +868,9 @@ app.post("/api/tools/discover_ai_services", async (req, res) => {
 /**
  * Direct endpoint for assess_compliance tool
  * Used by ChatGPT Apps via Gradio MCP server
+ * 
+ * Note: This endpoint sets env vars for the MCP tool to read.
+ * The main /api/chat endpoint uses direct API key passing instead.
  */
 app.post("/api/tools/assess_compliance", async (req, res) => {
   try {
@@ -882,16 +879,18 @@ app.post("/api/tools/assess_compliance", async (req, res) => {
     console.log(`[API] assess_compliance called, generateDocumentation: ${generateDocumentation}`);
     
     // Read model selection and API keys from headers
-    const modelHeader = req.headers["x-ai-model"] as string;
+    // For direct tool calls, we still set env vars since the MCP tool reads them internally
+    const modelHeader = req.headers["x-ai-model"] as string || "gpt-oss";
     const anthropicKeyHeader = req.headers["x-anthropic-api-key"] as string;
     const openaiKeyHeader = req.headers["x-openai-api-key"] as string;
     const xaiKeyHeader = req.headers["x-xai-api-key"] as string;
     const googleKeyHeader = req.headers["x-google-api-key"] as string;
     const modalEndpointHeader = req.headers["x-modal-endpoint-url"] as string;
     
-    if (modelHeader) {
-      process.env.AI_MODEL = modelHeader;
-    }
+    // Set AI_MODEL for the MCP tool
+    process.env.AI_MODEL = modelHeader;
+    
+    // Set API keys from headers (user-provided via UI)
     if (anthropicKeyHeader && anthropicKeyHeader.length > 10) {
       process.env.ANTHROPIC_API_KEY = anthropicKeyHeader;
     }
@@ -906,6 +905,9 @@ app.post("/api/tools/assess_compliance", async (req, res) => {
     }
     if (modalEndpointHeader && modalEndpointHeader.length > 10) {
       process.env.MODAL_ENDPOINT_URL = modalEndpointHeader;
+    } else if (modelHeader === "gpt-oss") {
+      // Default Modal endpoint for GPT-OSS
+      process.env.MODAL_ENDPOINT_URL = "https://vasilis--gpt-oss-vllm-inference-serve.modal.run";
     }
     
     const result = await assessCompliance({
@@ -929,17 +931,33 @@ app.post("/api/tools/assess_compliance", async (req, res) => {
 
 // Start server
 app.listen(PORT, () => {
+  const PUBLIC_URL = process.env.PUBLIC_URL;
+  const isProduction = process.env.NODE_ENV === "production";
+  
   console.log(`\n🇪🇺 EU AI Act Compliance Agent Server`);
   console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-  console.log(`✓ Server running on http://localhost:${PORT}`);
-  console.log(`✓ Health check: http://localhost:${PORT}/health`);
-  console.log(`✓ Chat API: http://localhost:${PORT}/api/chat`);
-  console.log(`✓ Tools API: http://localhost:${PORT}/api/tools`);
-  console.log(`\n📡 Direct Tool Endpoints (for ChatGPT Apps):`);
+  
+  if (isProduction) {
+    console.log(`🌐 Environment: PRODUCTION (HF Spaces)`);
+    console.log(`✓ Gradio UI: ${PUBLIC_URL || 'https://*.hf.space'}`);
+    console.log(`✓ API Server: http://localhost:${PORT} (internal only)`);
+    console.log(`\n📡 Internal API Endpoints (used by Gradio):`);
+  } else {
+    console.log(`🛠️  Environment: LOCAL DEVELOPMENT`);
+    console.log(`✓ Server running on http://localhost:${PORT}`);
+    console.log(`\n📡 API Endpoints:`);
+  }
+  
+  console.log(`  • GET  /health`);
+  console.log(`  • POST /api/chat`);
+  console.log(`  • GET  /api/tools`);
   console.log(`  • POST /api/tools/discover_organization`);
   console.log(`  • POST /api/tools/discover_ai_services`);
   console.log(`  • POST /api/tools/assess_compliance`);
-  console.log(`\n💡 Start Gradio UI: pnpm gradio`);
-  console.log(`💡 Start ChatGPT App: pnpm chatgpt-app`);
+  
+  if (!isProduction) {
+    console.log(`\n💡 Start Gradio UI: pnpm gradio`);
+    console.log(`💡 Start ChatGPT App: pnpm chatgpt-app`);
+  }
   console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
 });

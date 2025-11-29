@@ -727,7 +727,7 @@ async function discoverAISystemsWithAI(
   
   const now = new Date().toISOString();
   const organizationName = orgContext?.organization?.name || "Unknown Organization";
-  const model = getModel(undefined, "discover_ai_services");
+  const model = getModel(undefined, undefined, "discover_ai_services");
   
   const systemNamesContext = systemNames && systemNames.length > 0
     ? `Focus specifically on these systems: ${systemNames.join(", ")}`
