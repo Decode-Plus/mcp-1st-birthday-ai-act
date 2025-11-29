@@ -27,8 +27,33 @@ import { anthropic } from "@ai-sdk/anthropic";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+/**
+ * Get path to the MCP server
+ * 
+ * In production (Docker/HF Spaces): Use MCP_SERVER_PATH env var
+ * In development (tsx watch): Calculate relative path from source
+ * In local production (node dist/server.js): Calculate relative path from dist
+ */
+function getMCPServerPath(): string {
+  // 1. Use environment variable if set (for Docker/production deployments)
+  if (process.env.MCP_SERVER_PATH) {
+    console.log(`[Agent] Using MCP_SERVER_PATH from env: ${process.env.MCP_SERVER_PATH}`);
+    return process.env.MCP_SERVER_PATH;
+  }
+  
+  // 2. Calculate relative path based on whether we're running from dist or src
+  // - From src/agent/index.ts: need to go up 4 levels (agent -> src -> eu-ai-act-agent -> apps -> root)
+  // - From dist/server.js: need to go up 3 levels (dist -> eu-ai-act-agent -> apps -> root)
+  const isRunningFromDist = __dirname.includes('/dist') || __dirname.endsWith('/dist');
+  const levelsUp = isRunningFromDist ? "../../../" : "../../../../";
+  const relativePath = resolve(__dirname, levelsUp, "packages/eu-ai-act-mcp/dist/index.js");
+  
+  console.log(`[Agent] MCP server path (${isRunningFromDist ? 'dist' : 'src'}): ${relativePath}`);
+  return relativePath;
+}
+
 // Path to the built MCP server
-const MCP_SERVER_PATH = resolve(__dirname, "../../../../packages/eu-ai-act-mcp/dist/index.js");
+const MCP_SERVER_PATH = getMCPServerPath();
 
 /**
  * HIGH-RISK KEYWORDS based on EU AI Act Annex III

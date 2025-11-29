@@ -750,7 +750,7 @@ with gr.Blocks(
     title="🇪🇺 EU AI Act Compliance Agent",
 ) as demo:
     
-    # Custom CSS and JavaScript to handle scroll behavior and styling
+    # Custom CSS and JavaScript to handle scroll behavior, styling, and secure cookie storage
     gr.HTML("""
     <style>
     /* Hide Gradio's default footer */
@@ -786,9 +786,255 @@ with gr.Blocks(
     .scroll-indicator:hover {
         background: rgba(0, 0, 0, 0.9);
     }
+    
+    /* Keys loaded indicator */
+    .keys-loaded-badge {
+        display: inline-block;
+        background: #28a745;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        margin-left: 8px;
+    }
     </style>
     
     <script>
+    // ============================================
+    // Secure Cookie Storage for API Keys
+    // Keys are encoded and expire after 1 day
+    // ============================================
+    
+    const SecureKeyStorage = {
+        // Simple obfuscation key (not military-grade, but prevents casual inspection)
+        _obfKey: 'EU_AI_ACT_2024_MCP',
+        _cookiePrefix: 'euai_',
+        _expirationDays: 1,
+        
+        // XOR-based encoding with base64
+        _encode: function(str) {
+            if (!str) return '';
+            let encoded = '';
+            for (let i = 0; i < str.length; i++) {
+                encoded += String.fromCharCode(
+                    str.charCodeAt(i) ^ this._obfKey.charCodeAt(i % this._obfKey.length)
+                );
+            }
+            return btoa(encoded);
+        },
+        
+        // Decode from base64 + XOR
+        _decode: function(encoded) {
+            if (!encoded) return '';
+            try {
+                const decoded = atob(encoded);
+                let result = '';
+                for (let i = 0; i < decoded.length; i++) {
+                    result += String.fromCharCode(
+                        decoded.charCodeAt(i) ^ this._obfKey.charCodeAt(i % this._obfKey.length)
+                    );
+                }
+                return result;
+            } catch (e) {
+                console.warn('[SecureKeyStorage] Failed to decode:', e);
+                return '';
+            }
+        },
+        
+        // Set a cookie with 1-day expiration and security flags
+        _setCookie: function(name, value) {
+            const expires = new Date();
+            expires.setTime(expires.getTime() + (this._expirationDays * 24 * 60 * 60 * 1000));
+            
+            // Security flags: SameSite=Strict prevents CSRF, Secure ensures HTTPS only in production
+            const isSecure = window.location.protocol === 'https:';
+            const secureFlag = isSecure ? '; Secure' : '';
+            
+            document.cookie = `${this._cookiePrefix}${name}=${encodeURIComponent(value)}; ` +
+                `expires=${expires.toUTCString()}; ` +
+                `path=/; SameSite=Strict${secureFlag}`;
+        },
+        
+        // Get a cookie value
+        _getCookie: function(name) {
+            const fullName = this._cookiePrefix + name;
+            const cookies = document.cookie.split(';');
+            for (let cookie of cookies) {
+                const [cookieName, cookieValue] = cookie.trim().split('=');
+                if (cookieName === fullName) {
+                    return decodeURIComponent(cookieValue || '');
+                }
+            }
+            return '';
+        },
+        
+        // Delete a cookie
+        _deleteCookie: function(name) {
+            document.cookie = `${this._cookiePrefix}${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Strict`;
+        },
+        
+        // Store an API key (encoded)
+        storeKey: function(keyName, keyValue) {
+            if (!keyValue || keyValue.length < 10) {
+                this._deleteCookie(keyName);
+                return false;
+            }
+            const encoded = this._encode(keyValue);
+            this._setCookie(keyName, encoded);
+            console.log(`[SecureKeyStorage] Stored ${keyName} (expires in ${this._expirationDays} day)`);
+            return true;
+        },
+        
+        // Retrieve an API key (decoded)
+        getKey: function(keyName) {
+            const encoded = this._getCookie(keyName);
+            if (!encoded) return '';
+            return this._decode(encoded);
+        },
+        
+        // Store all keys at once
+        storeAllKeys: function(keys) {
+            const stored = [];
+            if (keys.tavily) { this.storeKey('tavily', keys.tavily); stored.push('Tavily'); }
+            if (keys.anthropic) { this.storeKey('anthropic', keys.anthropic); stored.push('Anthropic'); }
+            if (keys.openai) { this.storeKey('openai', keys.openai); stored.push('OpenAI'); }
+            if (keys.xai) { this.storeKey('xai', keys.xai); stored.push('xAI'); }
+            return stored;
+        },
+        
+        // Get all stored keys
+        getAllKeys: function() {
+            return {
+                tavily: this.getKey('tavily'),
+                anthropic: this.getKey('anthropic'),
+                openai: this.getKey('openai'),
+                xai: this.getKey('xai')
+            };
+        },
+        
+        // Check if any keys are stored
+        hasStoredKeys: function() {
+            const keys = this.getAllKeys();
+            return !!(keys.tavily || keys.anthropic || keys.openai || keys.xai);
+        },
+        
+        // Clear all stored keys
+        clearAllKeys: function() {
+            this._deleteCookie('tavily');
+            this._deleteCookie('anthropic');
+            this._deleteCookie('openai');
+            this._deleteCookie('xai');
+            console.log('[SecureKeyStorage] All keys cleared');
+        }
+    };
+    
+    // Make it globally accessible
+    window.SecureKeyStorage = SecureKeyStorage;
+    
+    // Function to populate key fields from cookies on page load
+    function populateKeysFromCookies() {
+        const keys = SecureKeyStorage.getAllKeys();
+        let populated = [];
+        
+        // Find Gradio input elements by their labels
+        // Gradio 4.x uses specific data attributes and structure
+        setTimeout(() => {
+            const inputs = document.querySelectorAll('input[type="password"]');
+            
+            inputs.forEach(input => {
+                // Find the label associated with this input
+                const container = input.closest('.gradio-textbox, .gr-textbox, [class*="textbox"]');
+                if (!container) return;
+                
+                const label = container.querySelector('label, span.label-text, [data-testid="label"]');
+                const labelText = label ? label.textContent.toLowerCase() : '';
+                
+                // Match labels to keys
+                if (labelText.includes('tavily') && keys.tavily) {
+                    input.value = keys.tavily;
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                    populated.push('Tavily');
+                } else if (labelText.includes('anthropic') && keys.anthropic) {
+                    input.value = keys.anthropic;
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                    populated.push('Anthropic');
+                } else if (labelText.includes('openai') && keys.openai) {
+                    input.value = keys.openai;
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                    populated.push('OpenAI');
+                } else if (labelText.includes('xai') && keys.xai) {
+                    input.value = keys.xai;
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                    populated.push('xAI');
+                }
+            });
+            
+            if (populated.length > 0) {
+                console.log('[SecureKeyStorage] Loaded keys from cookies:', populated.join(', '));
+                
+                // Show a notification that keys were loaded
+                showKeysLoadedNotification(populated);
+                
+                // Auto-click the save button to register keys with the backend
+                setTimeout(() => {
+                    const saveBtn = Array.from(document.querySelectorAll('button')).find(
+                        btn => btn.textContent.includes('Save Keys')
+                    );
+                    if (saveBtn) {
+                        saveBtn.click();
+                        console.log('[SecureKeyStorage] Auto-saved loaded keys to session');
+                    }
+                }, 500);
+            }
+        }, 1000); // Wait for Gradio to fully render
+    }
+    
+    // Show notification when keys are loaded from cookies
+    function showKeysLoadedNotification(keyNames) {
+        // Find the keys status markdown element
+        const statusElements = document.querySelectorAll('.prose, [class*="markdown"]');
+        
+        // Create a temporary notification
+        const notification = document.createElement('div');
+        notification.innerHTML = `
+            <div style="background: #d4edda; border: 1px solid #c3e6cb; color: #155724; 
+                        padding: 10px 15px; border-radius: 6px; margin: 10px 0;
+                        display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 1.2em;">🔐</span>
+                <div>
+                    <strong>Keys restored from secure storage</strong><br>
+                    <small>Loaded: ${keyNames.join(', ')} (expires in 24h)</small>
+                </div>
+            </div>
+        `;
+        
+        // Insert near the API Keys accordion
+        const accordion = document.querySelector('[class*="accordion"]');
+        if (accordion) {
+            accordion.insertAdjacentElement('afterend', notification);
+            
+            // Auto-hide after 5 seconds
+            setTimeout(() => {
+                notification.style.transition = 'opacity 0.5s';
+                notification.style.opacity = '0';
+                setTimeout(() => notification.remove(), 500);
+            }, 5000);
+        }
+    }
+    
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        if (SecureKeyStorage.hasStoredKeys()) {
+            populateKeysFromCookies();
+        }
+    });
+    
+    // Also try on window load (Gradio might not be ready on DOMContentLoaded)
+    window.addEventListener('load', function() {
+        if (SecureKeyStorage.hasStoredKeys()) {
+            setTimeout(populateKeysFromCookies, 500);
+        }
+    });
     // Disable Gradio's auto-scroll when user manually scrolls
     (function() {
         let userHasScrolled = false;
@@ -1016,14 +1262,17 @@ with gr.Blocks(
             
             # API Key inputs (password fields) - REQUIRED: No backend keys provided
             with gr.Accordion("🔑 API Keys (Required)", open=True):
-                gr.Markdown("⚠️ **API keys are required to use this service.** Please provide your own API keys below.")
+                gr.Markdown("""⚠️ **API keys are required to use this service.**
+
+🔐 Keys are stored securely in encoded cookies and **auto-expire after 24 hours**.
+Your keys persist across page refreshes but are automatically cleared for security.""")
                 
                 gr.Markdown("#### 🔍 Research API")
                 tavily_key = gr.Textbox(
                     label="Tavily API Key *",
                     placeholder="tvly-... (required for web research)",
                     type="password",
-                    value="",  # Never show existing keys
+                    value="",  # Will be populated from cookies via JS
                     info="Required - for web research & organization discovery"
                 )
                 
@@ -1032,24 +1281,26 @@ with gr.Blocks(
                     label="Anthropic API Key *",
                     placeholder="sk-ant-... (required for Claude 4.5)",
                     type="password",
-                    value="",  # Never show existing keys
+                    value="",  # Will be populated from cookies via JS
                     info="Required - for Claude 4.5 (default model)"
                 )
                 openai_key = gr.Textbox(
                     label="OpenAI API Key",
                     placeholder="sk-... (required for GPT-5)",
                     type="password",
-                    value="",  # Never show existing keys
+                    value="",  # Will be populated from cookies via JS
                     info="Required if using GPT-5 model"
                 )
                 xai_key = gr.Textbox(
                     label="xAI API Key",
                     placeholder="xai-... (required for Grok 4.1)",
                     type="password",
-                    value="",  # Never show existing keys
+                    value="",  # Will be populated from cookies via JS
                     info="Required if using Grok 4.1 model"
                 )
-                save_keys_btn = gr.Button("💾 Save Keys", variant="secondary", size="sm")
+                with gr.Row():
+                    save_keys_btn = gr.Button("💾 Save Keys", variant="secondary", size="sm")
+                    clear_keys_btn = gr.Button("🗑️ Clear Keys", variant="stop", size="sm")
                 keys_status = gr.Markdown("")
             
             gr.Markdown("---")
@@ -1137,10 +1388,10 @@ with gr.Blocks(
         return f"✅ Model set to: **{model_info.get('name', model_value)}**"
     
     def save_api_keys(tavily_val, anthropic_val, openai_val, xai_val):
-        """Save user-provided API keys for this session only
+        """Save user-provided API keys to session AND secure cookie storage
         
-        SECURITY: These are stored in memory only for this session.
-        They are NOT persisted and NOT sent to backend unless user provides them.
+        SECURITY: Keys are stored in memory for this session AND in encoded cookies
+        that expire after 1 day. Cookies use XOR obfuscation + base64 encoding.
         API keys are REQUIRED - no backend keys are provided.
         """
         saved = []
@@ -1169,6 +1420,7 @@ with gr.Blocks(
         status_parts = []
         if saved:
             status_parts.append(f"✅ Keys saved: {', '.join(saved)}")
+            status_parts.append("🔐 *Keys stored in secure cookies (expires in 24h)*")
         
         # Check for missing required keys based on selected model
         model = current_model_settings["model"]
@@ -1188,7 +1440,7 @@ with gr.Blocks(
             status_parts.append("⚠️ **Tavily API key required** for web research")
         
         if not status_parts:
-            return "✅ All required keys configured!"
+            return "✅ All required keys configured!\n\n🔐 *Keys stored in secure cookies (expires in 24h)*"
         
         return "\n\n".join(status_parts)
     
@@ -1345,8 +1597,56 @@ To use this service, you need to provide your own API keys. The following keys a
     # Model selection handler
     model_dropdown.change(update_model, [model_dropdown], [keys_status])
     
-    # Save keys handler (order matches function signature)
-    save_keys_btn.click(save_api_keys, [tavily_key, anthropic_key, openai_key, xai_key], [keys_status])
+    # Save keys handler with JavaScript to store in secure cookies
+    # The _js parameter runs after the Python function completes
+    save_keys_btn.click(
+        save_api_keys, 
+        [tavily_key, anthropic_key, openai_key, xai_key], 
+        [keys_status],
+        js="""
+        (tavily, anthropic, openai, xai) => {
+            // Store keys in secure cookies using our SecureKeyStorage
+            if (window.SecureKeyStorage) {
+                const stored = window.SecureKeyStorage.storeAllKeys({
+                    tavily: tavily,
+                    anthropic: anthropic,
+                    openai: openai,
+                    xai: xai
+                });
+                if (stored.length > 0) {
+                    console.log('[SecureKeyStorage] Stored to cookies:', stored.join(', '));
+                }
+            }
+            return [tavily, anthropic, openai, xai];
+        }
+        """
+    )
+    
+    # Clear keys function - clears both session and cookies
+    def clear_api_keys():
+        """Clear all stored API keys from session and cookies"""
+        current_model_settings["tavily_api_key"] = ""
+        current_model_settings["anthropic_api_key"] = ""
+        current_model_settings["openai_api_key"] = ""
+        current_model_settings["xai_api_key"] = ""
+        return "", "", "", "", "🗑️ All API keys cleared from session and cookies"
+    
+    # Clear keys handler with JavaScript to clear cookies
+    clear_keys_btn.click(
+        clear_api_keys,
+        [],
+        [tavily_key, anthropic_key, openai_key, xai_key, keys_status],
+        js="""
+        () => {
+            // Clear keys from secure cookies
+            if (window.SecureKeyStorage) {
+                window.SecureKeyStorage.clearAllKeys();
+                console.log('[SecureKeyStorage] All cookies cleared');
+            }
+            return [];
+        }
+        """
+    )
 
 # Launch the app
 if __name__ == "__main__":

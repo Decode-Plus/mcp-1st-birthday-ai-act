@@ -40,7 +40,8 @@ ENV NODE_ENV=production \
     GRADIO_SERVER_NAME=0.0.0.0 \
     GRADIO_SERVER_PORT=7860 \
     PATH=/home/node/venv/bin:$PATH \
-    VIRTUAL_ENV=/home/node/venv
+    VIRTUAL_ENV=/home/node/venv \
+    MCP_SERVER_PATH=/home/node/app/packages/eu-ai-act-mcp/dist/index.js
 
 EXPOSE 7860
 
