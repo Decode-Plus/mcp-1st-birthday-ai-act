@@ -27,238 +27,9 @@ API_TIMEOUT = 600  # seconds - increased for long-running compliance assessments
 def get_mcp_url() -> str:
     """Get the MCP server URL based on environment"""
     if PUBLIC_URL:
-        # Production: MCP is on the same server
+        # Production: MCP is on the same server via chatgpt_app.py
         return f"{PUBLIC_URL.rstrip('/')}/gradio_api/mcp/"
     return ""
-
-
-# ============================================================================
-# MCP TOOLS - Exposed to ChatGPT via Gradio MCP Server
-# ============================================================================
-
-@gr.mcp.tool(
-    _meta={
-        "openai/outputTemplate": "ui://widget/organization.html",
-        "openai/resultCanProduceWidget": True,
-        "openai/widgetAccessible": True,
-    }
-)
-def mcp_discover_organization(organization_name: str, domain: Optional[str] = None, context: Optional[str] = None) -> dict:
-    """
-    Discover and profile an organization for EU AI Act compliance assessment.
-    
-    This tool researches an organization and creates a comprehensive profile including:
-    - Basic organization information (name, sector, size, location)
-    - Contact information (email, phone, website)
-    - Regulatory context and compliance deadlines
-    - AI maturity level assessment
-    - Certifications and compliance status
-    
-    Based on EU AI Act Articles 16, 22, and 49.
-    
-    Parameters:
-        organization_name (str): Name of the organization to discover (required)
-        domain (str): Organization's domain (e.g., 'ibm.com'). Auto-discovered if not provided.
-        context (str): Additional context about the organization
-    
-    Returns:
-        dict: Organization profile with regulatory context
-    """
-    try:
-        response = requests.post(
-            f"{API_URL}/api/tools/discover_organization",
-            json={"organizationName": organization_name, "domain": domain, "context": context},
-            timeout=API_TIMEOUT
-        )
-        return response.json() if response.status_code == 200 else {"error": True, "message": f"API error: {response.status_code}"}
-    except Exception as e:
-        return {"error": True, "message": str(e)}
-
-
-@gr.mcp.tool(
-    _meta={
-        "openai/outputTemplate": "ui://widget/ai-services.html",
-        "openai/resultCanProduceWidget": True,
-        "openai/widgetAccessible": True,
-    }
-)
-def mcp_discover_ai_services(
-    organization_context: Optional[dict] = None,
-    system_names: Optional[list] = None,
-    scope: Optional[str] = None,
-    context: Optional[str] = None
-) -> dict:
-    """
-    Discover and classify AI systems within an organization per EU AI Act requirements.
-    
-    Parameters:
-        organization_context (dict): Organization profile from discover_organization tool
-        system_names (list): Specific AI system names to discover
-        scope (str): 'all' (default), 'high-risk-only', 'production-only'
-        context (str): Additional context
-    
-    Returns:
-        dict: AI systems with risk classification per Article 6 and Annex III
-    """
-    try:
-        response = requests.post(
-            f"{API_URL}/api/tools/discover_ai_services",
-            json={"organizationContext": organization_context, "systemNames": system_names, "scope": scope, "context": context},
-            timeout=API_TIMEOUT
-        )
-        return response.json() if response.status_code == 200 else {"error": True, "message": f"API error: {response.status_code}"}
-    except Exception as e:
-        return {"error": True, "message": str(e)}
-
-
-@gr.mcp.tool(
-    _meta={
-        "openai/outputTemplate": "ui://widget/compliance.html",
-        "openai/resultCanProduceWidget": True,
-        "openai/widgetAccessible": True,
-    }
-)
-def mcp_assess_compliance(
-    organization_context: Optional[dict] = None,
-    ai_services_context: Optional[dict] = None,
-    focus_areas: Optional[list] = None,
-    generate_documentation: bool = True
-) -> dict:
-    """
-    Assess EU AI Act compliance and generate documentation.
-    
-    Parameters:
-        organization_context (dict): Organization profile
-        ai_services_context (dict): AI services discovery results
-        focus_areas (list): Specific compliance areas to focus on
-        generate_documentation (bool): Generate documentation templates (default: True)
-    
-    Returns:
-        dict: Compliance score, gaps, recommendations, and documentation
-    """
-    try:
-        response = requests.post(
-            f"{API_URL}/api/tools/assess_compliance",
-            json={"organizationContext": organization_context, "aiServicesContext": ai_services_context, "focusAreas": focus_areas, "generateDocumentation": generate_documentation},
-            timeout=API_TIMEOUT
-        )
-        return response.json() if response.status_code == 200 else {"error": True, "message": f"API error: {response.status_code}"}
-    except Exception as e:
-        return {"error": True, "message": str(e)}
-
-
-# ============================================================================
-# MCP RESOURCES - ChatGPT Widget HTML
-# ============================================================================
-
-@gr.mcp.resource("ui://widget/organization.html", mime_type="text/html+skybridge")
-def widget_organization():
-    """Widget for organization discovery results"""
-    return """
-    <style>
-        .org-card { background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%); border-radius: 16px; padding: 24px; color: white; max-width: 500px; margin: 0 auto; }
-        .org-name { font-size: 24px; font-weight: 700; margin: 0; }
-        .info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin: 20px 0; }
-        .info-item { background: rgba(255,255,255,0.1); border-radius: 10px; padding: 12px; }
-        .info-label { font-size: 11px; text-transform: uppercase; opacity: 0.7; }
-        .info-value { font-size: 16px; font-weight: 600; }
-    </style>
-    <div class="org-card">
-        <h1 class="org-name" id="org-name">Loading...</h1>
-        <div class="info-grid">
-            <div class="info-item"><div class="info-label">Sector</div><div class="info-value" id="sector">-</div></div>
-            <div class="info-item"><div class="info-label">Size</div><div class="info-value" id="size">-</div></div>
-            <div class="info-item"><div class="info-label">EU Presence</div><div class="info-value" id="eu">-</div></div>
-            <div class="info-item"><div class="info-label">AI Maturity</div><div class="info-value" id="maturity">-</div></div>
-        </div>
-    </div>
-    <script>
-        function render() {
-            const data = window.openai?.toolOutput;
-            if (!data) return;
-            let d = typeof data === 'string' ? JSON.parse(data) : (data.text ? JSON.parse(data.text) : data);
-            if (d.content) for (const i of d.content) if (i.type === 'text') try { d = JSON.parse(i.text); break; } catch(e) {}
-            const org = d.organization || d;
-            document.getElementById('org-name').textContent = org.name || 'Unknown';
-            document.getElementById('sector').textContent = org.sector || '-';
-            document.getElementById('size').textContent = org.size || '-';
-            document.getElementById('eu').textContent = org.euPresence ? '✅ Yes' : '❌ No';
-            document.getElementById('maturity').textContent = org.aiMaturityLevel || '-';
-        }
-        window.addEventListener("openai:set_globals", () => render(), { passive: true });
-        render();
-    </script>
-    """
-
-
-@gr.mcp.resource("ui://widget/ai-services.html", mime_type="text/html+skybridge")
-def widget_ai_services():
-    """Widget for AI services discovery results"""
-    return """
-    <style>
-        .summary { background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%); border-radius: 16px; padding: 20px; color: white; margin-bottom: 16px; }
-        .risk-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; text-align: center; }
-        .risk-count { font-size: 28px; font-weight: 700; }
-    </style>
-    <div class="summary">
-        <h2 style="margin:0 0 16px 0;">🤖 AI Systems Risk Overview</h2>
-        <div class="risk-grid">
-            <div><div class="risk-count" style="color:#ff1744" id="unacceptable">0</div><div>Unacceptable</div></div>
-            <div><div class="risk-count" style="color:#ff9100" id="high">0</div><div>High Risk</div></div>
-            <div><div class="risk-count" style="color:#ffea00" id="limited">0</div><div>Limited</div></div>
-            <div><div class="risk-count" style="color:#00e676" id="minimal">0</div><div>Minimal</div></div>
-        </div>
-    </div>
-    <script>
-        function render() {
-            const data = window.openai?.toolOutput;
-            if (!data) return;
-            let d = typeof data === 'string' ? JSON.parse(data) : (data.text ? JSON.parse(data.text) : data);
-            if (d.content) for (const i of d.content) if (i.type === 'text') try { d = JSON.parse(i.text); break; } catch(e) {}
-            const s = d.riskSummary || {};
-            document.getElementById('unacceptable').textContent = s.unacceptableRiskCount || 0;
-            document.getElementById('high').textContent = s.highRiskCount || 0;
-            document.getElementById('limited').textContent = s.limitedRiskCount || 0;
-            document.getElementById('minimal').textContent = s.minimalRiskCount || 0;
-        }
-        window.addEventListener("openai:set_globals", () => render(), { passive: true });
-        render();
-    </script>
-    """
-
-
-@gr.mcp.resource("ui://widget/compliance.html", mime_type="text/html+skybridge")
-def widget_compliance():
-    """Widget for compliance assessment results"""
-    return """
-    <style>
-        .score-card { background: linear-gradient(135deg, #1a237e 0%, #283593 100%); border-radius: 20px; padding: 24px; color: white; text-align: center; }
-        .score { font-size: 64px; font-weight: 800; }
-        .risk-badge { display: inline-block; padding: 8px 16px; border-radius: 20px; font-weight: 600; margin-top: 12px; }
-        .CRITICAL { background: #f44336; } .HIGH { background: #ff9800; } .MEDIUM { background: #ffc107; color: #333; } .LOW { background: #4caf50; }
-    </style>
-    <div class="score-card">
-        <div class="score" id="score">--</div>
-        <div>EU AI Act Compliance Score</div>
-        <div class="risk-badge" id="risk">Loading...</div>
-    </div>
-    <script>
-        function render() {
-            const data = window.openai?.toolOutput;
-            if (!data) return;
-            let d = typeof data === 'string' ? JSON.parse(data) : (data.text ? JSON.parse(data.text) : data);
-            if (d.content) for (const i of d.content) if (i.type === 'text') try { d = JSON.parse(i.text); break; } catch(e) {}
-            const a = d.assessment || d;
-            document.getElementById('score').textContent = a.overallScore || '--';
-            const risk = a.riskLevel || 'MEDIUM';
-            const el = document.getElementById('risk');
-            el.textContent = risk + ' Risk';
-            el.className = 'risk-badge ' + risk;
-        }
-        window.addEventListener("openai:set_globals", () => render(), { passive: true });
-        render();
-    </script>
-    """
 
 # Model Configuration
 AVAILABLE_MODELS = {
@@ -1526,21 +1297,26 @@ with gr.Blocks(
     # Get MCP URL (written by chatgpt_app.py when it starts)
     mcp_url = get_mcp_url()
     
+    # MCP Server is deployed separately
+    MCP_SPACE_URL = "https://mcp-1st-birthday-eu-ai-act-chatgpt-mcp.hf.space"
+    MCP_URL = f"{MCP_SPACE_URL}/gradio_api/mcp/"
+    
     if is_production:
-        # Production: MCP is built into the main app on port 7860
-        mcp_url = f"{PUBLIC_URL.rstrip('/')}/gradio_api/mcp/"
+        # Production: Link to separate MCP Space
         chatgpt_section = f"""
-            <div style="background: linear-gradient(135deg, #1565c0 0%, #1976d2 100%); padding: 12px 20px; border-radius: 10px; display: inline-block;">
-                <span style="color: #fff; font-size: 0.9em;">
-                    💬 <strong>MCP Server Ready</strong>
-                </span>
-                <p style="color: rgba(255,255,255,0.9); font-size: 0.8em; margin: 8px 0 0 0;">
-                    <code style="background: rgba(255,255,255,0.2); padding: 4px 8px; border-radius: 4px; word-break: break-all;">{mcp_url}</code>
-                </p>
-                <p style="color: rgba(255,255,255,0.7); font-size: 0.7em; margin: 6px 0 0 0;">
-                    ChatGPT → Settings → Apps → Add Connector → Paste URL above
-                </p>
-            </div>
+            <a href="{MCP_SPACE_URL}" target="_blank" style="text-decoration: none;">
+                <div style="background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%); padding: 12px 20px; border-radius: 10px; display: inline-block;">
+                    <span style="color: #fff; font-size: 0.9em;">
+                        💬 <strong>ChatGPT MCP Server</strong>
+                    </span>
+                    <p style="color: rgba(255,255,255,0.9); font-size: 0.75em; margin: 8px 0 0 0; word-break: break-all;">
+                        <code style="background: rgba(255,255,255,0.2); padding: 3px 6px; border-radius: 3px;">{MCP_URL}</code>
+                    </p>
+                    <p style="color: rgba(255,255,255,0.7); font-size: 0.7em; margin: 6px 0 0 0;">
+                        Click to open MCP Server Space →
+                    </p>
+                </div>
+            </a>
         """
     else:
         # Local dev: Direct link
@@ -1686,14 +1462,15 @@ with gr.Blocks(
             
             # Sidebar ChatGPT App section
             if is_production:
-                sidebar_mcp_url = f"{PUBLIC_URL.rstrip('/')}/gradio_api/mcp/"
                 sidebar_chatgpt = f"""
-                <div style="background: linear-gradient(135deg, #1565c0 0%, #1976d2 100%); padding: 12px; border-radius: 8px; margin: 5px 0;">
-                    <strong style="color: #fff;">💬 MCP Server</strong>
-                    <p style="color: rgba(255,255,255,0.9); font-size: 0.7em; margin: 6px 0 0 0; word-break: break-all;">
-                        <code style="background: rgba(255,255,255,0.2); padding: 2px 4px; border-radius: 3px;">{sidebar_mcp_url}</code>
-                    </p>
-                </div>
+                <a href="{MCP_SPACE_URL}" target="_blank" style="text-decoration: none;">
+                    <div style="background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%); padding: 12px; border-radius: 8px; margin: 5px 0;">
+                        <strong style="color: #fff;">💬 MCP Server</strong>
+                        <p style="color: rgba(255,255,255,0.9); font-size: 0.7em; margin: 6px 0 0 0;">
+                            Click to get MCP URL →
+                        </p>
+                    </div>
+                </a>
                 """
             else:
                 sidebar_chatgpt = """
@@ -2061,31 +1838,17 @@ To use this service, you need to provide your own API keys. The following keys a
 
 # Launch the app
 if __name__ == "__main__":
-    is_production = bool(PUBLIC_URL)
-    mcp_url = get_mcp_url()
-    
     print("\n" + "="*60)
-    print("🇪🇺 EU AI Act Compliance Agent - Gradio UI + MCP Server")
+    print("🇪🇺 EU AI Act Compliance Agent - Gradio UI")
     print("="*60)
     print(f"\n📡 API Server: {API_URL}")
     print(f"✓ Status: {check_api_status()}")
-    
-    if is_production:
-        print(f"\n🌐 Environment: PRODUCTION (HF Spaces)")
-        print(f"✓ Public URL: {PUBLIC_URL}")
-        print(f"✓ MCP Server: {mcp_url}")
-    else:
-        print(f"\n🛠️  Environment: LOCAL DEVELOPMENT")
-        print(f"   MCP URL will be shown after launch (with share=True)")
-    
-    print(f"\n🚀 Starting Gradio interface with MCP server...")
+    print(f"\n🚀 Starting Gradio interface...")
     print("="*60 + "\n")
     
-    # Launch with MCP server enabled
     demo.launch(
         server_name=os.getenv("GRADIO_SERVER_NAME", "0.0.0.0"),
         server_port=int(os.getenv("GRADIO_SERVER_PORT", "7860")),
         share=os.getenv("GRADIO_SHARE", "false").lower() == "true",
-        mcp_server=True,  # Enable MCP server for ChatGPT Apps
         show_error=True,
     )

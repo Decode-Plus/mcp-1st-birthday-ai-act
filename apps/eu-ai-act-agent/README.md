@@ -33,12 +33,15 @@ An interactive AI agent with Gradio UI for navigating EU AI Act compliance requi
 This submission showcases:
 - **Custom MCP Server** with 3 specialized tools for EU AI Act compliance
 - **Enterprise-grade Agent** using Vercel AI SDK v5 with intelligent tool orchestration
-- **ChatGPT Apps Integration** - Deploy as a connector to use tools directly in ChatGPT
+- **ChatGPT Apps Integration** - Deploy as a connector to use tools directly in ChatGPT ([Live MCP Server](https://mcp-1st-birthday-eu-ai-act-chatgpt-mcp.hf.space/))
 - **Multi-model Support** - 6 AI models including free GPT-OSS via Modal.com
 - **Real-world Application** - Solving critical regulatory compliance challenges
 - **Production-ready Architecture** - Gradio UI + Express API + MCP Protocol
 
-**🔗 Demo & Showcase:** [www.legitima.ai/mcp-hackathon](https://www.legitima.ai/mcp-hackathon)
+**🔗 Demo & Showcase:** [www.legitima.ai/mcp-hackathon](https://www.legitima.ai/mcp-hackathon)  
+**📱 Social Media:** [LinkedIn Post 1](https://www.linkedin.com/posts/iordanis-sarafidis_mcp-1st-birthday-mcp-1st-birthday-activity-7400132272282144768-ZIir?utm_source=share&utm_medium=member_desktop&rcm=ACoAAB0ARLABGvUO6Q--hJP0cDG7h0LZT0-roLs)
+
+[LinkedIn Post 2](https://www.linkedin.com/posts/billdrosatos_mcp-1st-birthday-mcp-1st-birthday-activity-7400135422502252544-C5BS?utm_source=share&utm_medium=member_desktop&rcm=ACoAAB0ARLABGvUO6Q--hJP0cDG7h0LZT0-roLs)
 
 ## 🏗️ Architecture
 
@@ -123,7 +126,7 @@ This agent leverages a **custom MCP server** (`@eu-ai-act/mcp-server`) that prov
 
 **📚 Full MCP Tools Documentation**: See [`packages/eu-ai-act-mcp/README.md`](../../packages/eu-ai-act-mcp/README.md) for complete tool schemas, input/output formats, and usage examples.
 
-**💬 Use in ChatGPT**: The MCP server can be deployed as a ChatGPT App connector - see [How to Use in ChatGPT](#-how-to-use-in-chatgpt) section below for instructions.
+**💬 Use in ChatGPT**: The MCP server is deployed and ready to use as a ChatGPT App connector at [https://mcp-1st-birthday-eu-ai-act-chatgpt-mcp.hf.space/](https://mcp-1st-birthday-eu-ai-act-chatgpt-mcp.hf.space/) - see [How to Use in ChatGPT](#-how-to-use-in-chatgpt) section below for instructions.
 
 ## ✨ Features
 
@@ -265,8 +268,15 @@ The Gradio UI will be available at `http://localhost:7860` 🎉
 
 The MCP server can be deployed as a **ChatGPT App** (connector) to use EU AI Act compliance tools directly in ChatGPT conversations!
 
+**🌐 Pre-deployed MCP Server:** The MCP server is already deployed and available at [https://mcp-1st-birthday-eu-ai-act-chatgpt-mcp.hf.space/](https://mcp-1st-birthday-eu-ai-act-chatgpt-mcp.hf.space/) - you can use this URL directly as a ChatGPT connector!
+
 ### Quick Start
 
+**Option A: Use the Pre-deployed Server** (Recommended)
+1. **Use the deployed MCP server** at [https://mcp-1st-birthday-eu-ai-act-chatgpt-mcp.hf.space/](https://mcp-1st-birthday-eu-ai-act-chatgpt-mcp.hf.space/)
+2. Skip to step 2 below to configure ChatGPT
+
+**Option B: Deploy Your Own**
 1. **Start the ChatGPT App** with `share=True`:
    ```bash
    cd apps/eu-ai-act-agent
@@ -285,7 +295,9 @@ The MCP server can be deployed as a **ChatGPT App** (connector) to use EU AI Act
 3. **Create a Connector**:
    - In ChatGPT, go to **Settings** → **Apps & Connectors**
    - Click **Create Connector**
-   - Enter the MCP server URL from the terminal (e.g., `https://xxxxx.gradio.live`)
+   - Enter the MCP server URL:
+     - **Pre-deployed:** `https://mcp-1st-birthday-eu-ai-act-chatgpt-mcp.hf.space/`
+     - **Or your own:** The URL from the terminal (e.g., `https://xxxxx.gradio.live`)
    - Name it `eu-ai-act` (or your preferred name)
 
 4. **Chat with ChatGPT using the connector**:
