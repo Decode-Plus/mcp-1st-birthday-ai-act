@@ -118,7 +118,7 @@ export function getModel(modelName?: string, apiKeys?: ApiKeys, context?: string
       throw new Error("Anthropic API key is required for Claude 4.5. Please enter your API key in the Model Settings panel.");
     }
     const client = createAnthropic({ apiKey: keys.anthropicApiKey });
-    return client("claude-sonnet-4-5-20250514");
+    return client("claude-sonnet-4-5");
   }
   
   if (model === "claude-opus") {
