@@ -42,7 +42,7 @@ import type {
   Recommendation,
   ComplianceDocumentation,
 } from "../types/index.js";
-import { getModel } from "../utils/model.js";
+import { getModel, type ApiKeys } from "../utils/model.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -530,9 +530,20 @@ function calculateOverallScore(
  * Main compliance assessment function
  */
 export async function assessCompliance(
-  input: ComplianceAssessmentInput
+  input: ComplianceAssessmentInput & { model?: string; apiKeys?: ApiKeys; tavilyApiKey?: string }
 ): Promise<ComplianceAssessmentResponse> {
-  let { organizationContext, aiServicesContext, focusAreas, generateDocumentation = true, model: modelParam } = input;
+  let { organizationContext, aiServicesContext, focusAreas, generateDocumentation = true, model: modelParam, apiKeys, tavilyApiKey } = input;
+  
+  // Use ONLY passed parameters from Gradio UI - NEVER read from process.env!
+  if (!modelParam) {
+    throw new Error("Model selection is required. Please select a model in the Model Settings panel.");
+  }
+  if (!apiKeys) {
+    throw new Error("API keys are required. Please provide your API keys in the Model Settings panel.");
+  }
+  
+  // Ensure modelParam is a string (TypeScript type narrowing)
+  const modelName: string = modelParam;
   
   // Normalize organizationContext - handle both full and simplified formats
   if (organizationContext && !organizationContext.organization) {
@@ -682,7 +693,7 @@ export async function assessCompliance(
   }
   console.error("-".repeat(60));
   
-  const model = getModel(modelParam, undefined, "assess_compliance");
+  const model = getModel(modelName, apiKeys, "assess_compliance");
   const now = new Date().toISOString();
   
   // Step 1: Generate compliance assessment using Grok 4
@@ -855,17 +866,20 @@ export async function assessCompliance(
     }
   }
   
-  // Determine which model was used for metadata
-  const modelEnv = modelParam || process.env.AI_MODEL || "claude-4.5";
-  const modelUsed = modelEnv === "gpt-5" 
+  // Determine which model was used for metadata (use ONLY passed modelName)
+  const modelUsed = modelName === "gpt-5" 
     ? "openai-gpt-5" 
-    : modelEnv === "claude-4.5"
+    : modelName === "claude-4.5"
     ? "anthropic-claude-sonnet-4-5"
-    : modelEnv === "claude-opus"
+    : modelName === "claude-opus"
     ? "anthropic-claude-opus-4-5"
-    : modelEnv === "gemini-3"
+    : modelName === "gemini-3"
     ? "google-gemini-3-pro"
-    : "xai-grok-4-1-fast-reasoning";
+    : modelName === "gpt-oss"
+    ? "openai-gpt-oss-20b-modal"
+    : modelName === "grok-4-1"
+    ? "xai-grok-4-1-fast-reasoning"
+    : "unknown";
   
   // Build response
   const response: ComplianceAssessmentResponse = {

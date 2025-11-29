@@ -34,6 +34,7 @@ export type { ApiKeys };
 export interface AgentConfig {
   modelName: string;
   apiKeys: ApiKeys;
+  tavilyApiKey?: string;
 }
 
 /**
@@ -213,9 +214,10 @@ function validateToolResult(toolName: string, result: any): any {
  * Create MCP client and retrieve tools
  * Passes API keys to the MCP server for tool execution
  */
-async function createMCPClientWithTools(apiKeys: ApiKeys) {
+async function createMCPClientWithTools(apiKeys: ApiKeys, modelName: string, tavilyApiKey?: string) {
   // Pass API keys to MCP server child process via environment
   // MCP tools need these for Tavily research and AI model calls
+  // IMPORTANT: These come from Gradio UI user input - NEVER from process.env!
   const env: Record<string, string> = {
     // Only pass MCP_SERVER_PATH and NODE_ENV, plus API keys
     NODE_ENV: process.env.NODE_ENV || "production",
@@ -224,6 +226,14 @@ async function createMCPClientWithTools(apiKeys: ApiKeys) {
   // Pass MCP server path if set
   if (process.env.MCP_SERVER_PATH) {
     env.MCP_SERVER_PATH = process.env.MCP_SERVER_PATH;
+  }
+  
+  // Pass model name from Gradio UI
+  env.AI_MODEL = modelName;
+  
+  // Pass Tavily API key from Gradio UI if provided
+  if (tavilyApiKey) {
+    env.TAVILY_API_KEY = tavilyApiKey;
   }
   
   // Pass API keys from user (via Gradio UI) to MCP server
@@ -254,7 +264,7 @@ async function createMCPClientWithTools(apiKeys: ApiKeys) {
  * @param config - Agent configuration with model name and API keys from Gradio UI
  */
 export function createAgent(config: AgentConfig) {
-  const { modelName, apiKeys } = config;
+  const { modelName, apiKeys, tavilyApiKey } = config;
   
   // Log the model being used
   console.log(`[Agent] Creating agent with model: ${modelName}`);
@@ -265,7 +275,7 @@ export function createAgent(config: AgentConfig) {
      * Generate a single response
      */
     async generateText(params: { messages: any[] }) {
-      const { client, tools } = await createMCPClientWithTools(apiKeys);
+      const { client, tools } = await createMCPClientWithTools(apiKeys, modelName, tavilyApiKey);
 
       try {
         const systemPrompt = getSystemPrompt(modelName);
@@ -399,7 +409,7 @@ export function createAgent(config: AgentConfig) {
      * Stream a response with MCP tools
      */
     async streamText(params: { messages: any[] }) {
-      const { client, tools } = await createMCPClientWithTools(apiKeys);
+      const { client, tools } = await createMCPClientWithTools(apiKeys, modelName, tavilyApiKey);
       const systemPrompt = getSystemPrompt(modelName);
 
       const result = streamText({
@@ -536,7 +546,7 @@ export function createAgent(config: AgentConfig) {
      * Get available tools from MCP server
      */
     async getTools() {
-      const { client, tools } = await createMCPClientWithTools(apiKeys);
+      const { client, tools } = await createMCPClientWithTools(apiKeys, modelName, tavilyApiKey);
       const toolList = Object.entries(tools).map(([name, t]) => ({
         name,
         description: (t as any).description || "No description",

@@ -16,7 +16,8 @@ import { createAgent } from "./agent/index.js";
 import { 
   discoverOrganization, 
   discoverAIServices, 
-  assessCompliance 
+  assessCompliance,
+  type ApiKeys
 } from "@eu-ai-act/mcp-server";
 
 // Load environment variables from project root
@@ -227,13 +228,12 @@ app.post("/api/chat", async (req, res) => {
     };
     
     // Tavily API key (optional - for web research)
-    const tavilyKeyHeader = req.headers["x-tavily-api-key"] as string;
-    if (tavilyKeyHeader && tavilyKeyHeader.length > 10) {
-      // Tavily is still read via env var by MCP tools for now
-      process.env.TAVILY_API_KEY = tavilyKeyHeader;
-    }
+    const tavilyApiKey = (req.headers["x-tavily-api-key"] as string) || undefined;
     
     console.log(`[API] Model: ${modelName}, API keys provided: ${Object.entries(apiKeys).filter(([_, v]) => v).map(([k]) => k).join(", ") || "none (GPT-OSS is FREE)"}`);
+    if (tavilyApiKey) {
+      console.log(`[API] Tavily API key provided: ${tavilyApiKey.substring(0, 10)}...`);
+    }
     
     // For GPT-OSS, use default Modal endpoint if not provided
     if (modelName === "gpt-oss" && !apiKeys.modalEndpointUrl) {
@@ -249,8 +249,8 @@ app.post("/api/chat", async (req, res) => {
     // Send user message confirmation immediately
     res.write(`data: ${JSON.stringify({ type: "user_message", content: message })}\n\n`);
 
-    // Create agent instance with model and API keys from Gradio UI
-    const agent = createAgent({ modelName, apiKeys });
+    // Create agent instance with model, API keys, and Tavily key from Gradio UI
+    const agent = createAgent({ modelName, apiKeys, tavilyApiKey });
 
     // Convert history to messages format
     let messages = history.map((msg: any) => ({
@@ -806,16 +806,24 @@ app.post("/api/tools/discover_organization", async (req, res) => {
     
     console.log(`[API] discover_organization called for: ${organizationName}`);
     
-    // Read API keys from headers if provided
-    const tavilyKeyHeader = req.headers["x-tavily-api-key"] as string;
-    if (tavilyKeyHeader && tavilyKeyHeader.length > 10) {
-      process.env.TAVILY_API_KEY = tavilyKeyHeader;
-    }
+    // Read API keys from headers (from Gradio UI)
+    const tavilyApiKey = (req.headers["x-tavily-api-key"] as string) || undefined;
+    const modelName = (req.headers["x-ai-model"] as string) || "gpt-oss";
+    const apiKeys = {
+      modalEndpointUrl: req.headers["x-modal-endpoint-url"] as string || undefined,
+      openaiApiKey: req.headers["x-openai-api-key"] as string || undefined,
+      xaiApiKey: req.headers["x-xai-api-key"] as string || undefined,
+      anthropicApiKey: req.headers["x-anthropic-api-key"] as string || undefined,
+      googleApiKey: req.headers["x-google-api-key"] as string || undefined,
+    };
     
     const result = await discoverOrganization({
       organizationName,
       domain: domain || undefined,
       context: context || undefined,
+      model: modelName,
+      apiKeys,
+      tavilyApiKey,
     });
     
     console.log(`[API] discover_organization completed for: ${organizationName}`);
@@ -840,17 +848,25 @@ app.post("/api/tools/discover_ai_services", async (req, res) => {
     
     console.log(`[API] discover_ai_services called, systemNames: ${JSON.stringify(systemNames)}`);
     
-    // Read API keys from headers if provided
-    const tavilyKeyHeader = req.headers["x-tavily-api-key"] as string;
-    if (tavilyKeyHeader && tavilyKeyHeader.length > 10) {
-      process.env.TAVILY_API_KEY = tavilyKeyHeader;
-    }
+    // Read API keys from headers (from Gradio UI)
+    const tavilyApiKey = (req.headers["x-tavily-api-key"] as string) || undefined;
+    const modelName = (req.headers["x-ai-model"] as string) || "gpt-oss";
+    const apiKeys = {
+      modalEndpointUrl: req.headers["x-modal-endpoint-url"] as string || undefined,
+      openaiApiKey: req.headers["x-openai-api-key"] as string || undefined,
+      xaiApiKey: req.headers["x-xai-api-key"] as string || undefined,
+      anthropicApiKey: req.headers["x-anthropic-api-key"] as string || undefined,
+      googleApiKey: req.headers["x-google-api-key"] as string || undefined,
+    };
     
     const result = await discoverAIServices({
       organizationContext: organizationContext || undefined,
       systemNames: systemNames || undefined,
       scope: scope || undefined,
       context: context || undefined,
+      model: modelName,
+      apiKeys,
+      tavilyApiKey,
     });
     
     console.log(`[API] discover_ai_services completed, found ${result.systems?.length || 0} systems`);
@@ -878,36 +894,20 @@ app.post("/api/tools/assess_compliance", async (req, res) => {
     
     console.log(`[API] assess_compliance called, generateDocumentation: ${generateDocumentation}`);
     
-    // Read model selection and API keys from headers
-    // For direct tool calls, we still set env vars since the MCP tool reads them internally
-    const modelHeader = req.headers["x-ai-model"] as string || "gpt-oss";
-    const anthropicKeyHeader = req.headers["x-anthropic-api-key"] as string;
-    const openaiKeyHeader = req.headers["x-openai-api-key"] as string;
-    const xaiKeyHeader = req.headers["x-xai-api-key"] as string;
-    const googleKeyHeader = req.headers["x-google-api-key"] as string;
-    const modalEndpointHeader = req.headers["x-modal-endpoint-url"] as string;
+    // Read model selection and API keys from headers (from Gradio UI)
+    const modelName = (req.headers["x-ai-model"] as string) || "gpt-oss";
+    const tavilyApiKey = (req.headers["x-tavily-api-key"] as string) || undefined;
+    const apiKeys = {
+      modalEndpointUrl: req.headers["x-modal-endpoint-url"] as string || undefined,
+      openaiApiKey: req.headers["x-openai-api-key"] as string || undefined,
+      xaiApiKey: req.headers["x-xai-api-key"] as string || undefined,
+      anthropicApiKey: req.headers["x-anthropic-api-key"] as string || undefined,
+      googleApiKey: req.headers["x-google-api-key"] as string || undefined,
+    };
     
-    // Set AI_MODEL for the MCP tool
-    process.env.AI_MODEL = modelHeader;
-    
-    // Set API keys from headers (user-provided via UI)
-    if (anthropicKeyHeader && anthropicKeyHeader.length > 10) {
-      process.env.ANTHROPIC_API_KEY = anthropicKeyHeader;
-    }
-    if (openaiKeyHeader && openaiKeyHeader.length > 10) {
-      process.env.OPENAI_API_KEY = openaiKeyHeader;
-    }
-    if (xaiKeyHeader && xaiKeyHeader.length > 10) {
-      process.env.XAI_API_KEY = xaiKeyHeader;
-    }
-    if (googleKeyHeader && googleKeyHeader.length > 10) {
-      process.env.GOOGLE_GENERATIVE_AI_API_KEY = googleKeyHeader;
-    }
-    if (modalEndpointHeader && modalEndpointHeader.length > 10) {
-      process.env.MODAL_ENDPOINT_URL = modalEndpointHeader;
-    } else if (modelHeader === "gpt-oss") {
-      // Default Modal endpoint for GPT-OSS
-      process.env.MODAL_ENDPOINT_URL = "https://vasilis--gpt-oss-vllm-inference-serve.modal.run";
+    // For GPT-OSS, use default Modal endpoint if not provided
+    if (modelName === "gpt-oss" && !apiKeys.modalEndpointUrl) {
+      apiKeys.modalEndpointUrl = "https://vasilis--gpt-oss-vllm-inference-serve.modal.run";
     }
     
     const result = await assessCompliance({
@@ -915,6 +915,9 @@ app.post("/api/tools/assess_compliance", async (req, res) => {
       aiServicesContext: aiServicesContext || undefined,
       focusAreas: focusAreas || undefined,
       generateDocumentation: generateDocumentation !== false, // Default true
+      model: modelName,
+      apiKeys,
+      tavilyApiKey,
     });
     
     console.log(`[API] assess_compliance completed, score: ${result.assessment?.overallScore}`);

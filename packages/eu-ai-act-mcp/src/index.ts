@@ -33,9 +33,43 @@ import {
   DiscoverAIServicesInputSchema,
   ComplianceAssessmentInputSchema,
 } from "./schemas/index.js";
+import type { ApiKeys } from "./utils/model.js";
 
 // Export shared utilities for external use
 export { getModel, type ApiKeys } from "./utils/model.js";
+
+/**
+ * Get API keys from environment variables (set by agent from Gradio UI)
+ * These are set by the agent when creating the MCP client - they come from Gradio UI user input
+ * NEVER read from process.env in tool functions - always use passed parameters!
+ */
+function getApiKeysFromEnv(): ApiKeys {
+  return {
+    openaiApiKey: process.env.OPENAI_API_KEY,
+    anthropicApiKey: process.env.ANTHROPIC_API_KEY,
+    googleApiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+    xaiApiKey: process.env.XAI_API_KEY,
+    modalEndpointUrl: process.env.MODAL_ENDPOINT_URL,
+  };
+}
+
+/**
+ * Get model name from environment variable (set by agent from Gradio UI)
+ * This is set by the agent when creating the MCP client - it comes from Gradio UI user selection
+ * NEVER read from process.env.AI_MODEL in tool functions - always use passed parameter!
+ */
+function getModelFromEnv(): string | undefined {
+  return process.env.AI_MODEL;
+}
+
+/**
+ * Get Tavily API key from environment variable (set by agent from Gradio UI)
+ * This is set by the agent when creating the MCP client - it comes from Gradio UI user input
+ * NEVER read from process.env.TAVILY_API_KEY in tool functions - always use passed parameter!
+ */
+function getTavilyKeyFromEnv(): string | undefined {
+  return process.env.TAVILY_API_KEY;
+}
 
 // Export tool functions for direct API use (ChatGPT Apps, REST API, etc.)
 export { discoverOrganization, discoverAIServices, assessCompliance };
@@ -82,14 +116,22 @@ Based on EU AI Act Articles 16 (Provider Obligations), 22 (Authorized Representa
     const cleanDomain = domain ?? undefined;
     const cleanContext = context ?? undefined;
     
+    // Get API keys and model from env vars (set by agent from Gradio UI)
+    const apiKeys = getApiKeysFromEnv();
+    const model = process.env.AI_MODEL;
+    const tavilyApiKey = process.env.TAVILY_API_KEY;
+    
     console.error(`[discover_organization] Called with: organizationName="${organizationName}", domain="${cleanDomain}", context="${cleanContext}"`);
     
     try {
-    // Execute tool
+    // Execute tool with API keys from Gradio UI
     const result = await discoverOrganization({
       organizationName,
       domain: cleanDomain,
       context: cleanContext,
+      model,
+      apiKeys,
+      tavilyApiKey,
     });
     
     console.error(`[discover_organization] Completed, result has ${JSON.stringify(result).length} chars`);
@@ -149,15 +191,24 @@ Generates reports for systems requiring immediate attention with EU database reg
     const cleanScope = scope ?? undefined;
     const cleanContext = context ?? undefined;
     
+    // Get API keys, model, and Tavily key from env vars (set by agent from Gradio UI)
+    // These come from the Gradio UI user input - NEVER read from process.env in tool functions!
+    const apiKeys = getApiKeysFromEnv();
+    const model = getModelFromEnv();
+    const tavilyApiKey = getTavilyKeyFromEnv();
+    
     console.error(`[discover_ai_services] Called with: systemNames=${JSON.stringify(cleanSystemNames)}, scope="${cleanScope}"`);
     
     try {
-    // Execute tool
+    // Execute tool with API keys from Gradio UI
     const result = await discoverAIServices({
       organizationContext: cleanOrgContext,
       systemNames: cleanSystemNames,
       scope: cleanScope,
       context: cleanContext,
+      model,
+      apiKeys,
+      tavilyApiKey,
     });
     
     console.error(`[discover_ai_services] Completed, found ${result.systems?.length || 0} systems`);
@@ -234,18 +285,24 @@ Requires appropriate API key environment variable based on selected model.`,
     const cleanGenerateDocumentation = generateDocumentation ?? undefined;
     const cleanOrgContext = organizationContext ?? undefined;
     const cleanAiServicesContext = aiServicesContext ?? undefined;
-    const cleanModel = model ?? undefined;
+    // Get API keys, model, and Tavily key from env vars (set by agent from Gradio UI)
+    // These come from the Gradio UI user input - NEVER read from process.env in tool functions!
+    const apiKeys = getApiKeysFromEnv();
+    const cleanModel = model ?? getModelFromEnv();
+    const tavilyApiKey = getTavilyKeyFromEnv();
     
     console.error(`[assess_compliance] Called with: model="${cleanModel}", focusAreas=${JSON.stringify(cleanFocusAreas)}, generateDocumentation=${cleanGenerateDocumentation}`);
     
     try {
-    // Execute tool
+    // Execute tool with API keys from Gradio UI
     const result = await assessCompliance({
       organizationContext: cleanOrgContext,
       aiServicesContext: cleanAiServicesContext,
       focusAreas: cleanFocusAreas,
       generateDocumentation: cleanGenerateDocumentation,
       model: cleanModel as any,
+      apiKeys,
+      tavilyApiKey,
     });
     
     console.error(`[assess_compliance] Completed, score: ${result.assessment?.overallScore || 'N/A'}`);

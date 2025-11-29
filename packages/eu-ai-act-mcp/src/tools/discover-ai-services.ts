@@ -25,7 +25,7 @@ import type {
   OrganizationProfile,
   RiskCategory,
 } from "../types/index.js";
-import { getModel } from "../utils/model.js";
+import { getModel, type ApiKeys } from "../utils/model.js";
 
 /**
  * Parse JSON response safely from AI model output
@@ -67,9 +67,11 @@ function parseJSONResponse<T>(content: string): T | null {
  */
 async function scanForAISystems(
   orgContext?: OrganizationProfile,
-  systemNames?: string[]
+  systemNames?: string[],
+  tavilyApiKey?: string
 ): Promise<AISystemProfile[]> {
-  const apiKey = process.env.TAVILY_API_KEY;
+  // Use passed Tavily API key if provided, otherwise fall back to env var
+  const apiKey = tavilyApiKey || process.env.TAVILY_API_KEY;
   const organizationName = orgContext?.organization?.name || "Example Corp";
   
   if (!apiKey) {
@@ -122,8 +124,9 @@ async function scanForAISystems(
     );
     
     if (discoveredSystems.length === 0) {
-      console.warn("⚠️  No AI systems found in Tavily results, using AI model fallback");
-      return discoverAISystemsWithAI(orgContext, systemNames);
+      console.warn("⚠️  No AI systems found in Tavily results");
+      // Return empty systems - user should provide Tavily key from Gradio UI
+      return [];
     }
     
     console.error(`\n✅ Discovered ${discoveredSystems.length} AI systems for ${organizationName}`);
@@ -721,13 +724,15 @@ function buildComplianceStatus(category: RiskCategory): any {
  */
 async function discoverAISystemsWithAI(
   orgContext?: OrganizationProfile,
-  systemNames?: string[]
+  systemNames?: string[],
+  modelName?: string,
+  apiKeys?: ApiKeys
 ): Promise<AISystemProfile[]> {
   console.error("\n🤖 Using AI model fallback for AI systems discovery (Tavily not available)");
   
   const now = new Date().toISOString();
   const organizationName = orgContext?.organization?.name || "Unknown Organization";
-  const model = getModel(undefined, undefined, "discover_ai_services");
+  const model = getModel(modelName, apiKeys, "discover_ai_services");
   
   const systemNamesContext = systemNames && systemNames.length > 0
     ? `Focus specifically on these systems: ${systemNames.join(", ")}`
@@ -844,7 +849,7 @@ Provide 1-5 AI systems based on what you know about ${organizationName}. If you 
           discoveryMethod: "ai-model-fallback",
           researchSources: [],
           aiGeneratedProfile: {
-            modelUsed: process.env.AI_MODEL || "claude-4.5",
+            modelUsed: modelName || "unknown",
           },
         },
       } as AISystemProfile;
@@ -1123,14 +1128,30 @@ function analyzeComplianceGaps(system: AISystemProfile): string[] {
  * Main AI services discovery function
  */
 export async function discoverAIServices(
-  input: DiscoverAIServicesInput
+  input: DiscoverAIServicesInput & { model?: string; apiKeys?: ApiKeys; tavilyApiKey?: string }
 ): Promise<AISystemsDiscoveryResponse> {
-  const { organizationContext, systemNames, scope, context } = input;
+  const { organizationContext, systemNames, scope, context, model, apiKeys, tavilyApiKey } = input;
 
   console.error(`[discoverAIServices] Starting discovery with: systemNames=${JSON.stringify(systemNames)}, scope=${scope}, context=${context}`);
 
   // Step 1: Scan for AI systems
-  const systems = await scanForAISystems(organizationContext, systemNames);
+  // Use ONLY passed Tavily API key from Gradio UI - NEVER read from process.env!
+  if (!tavilyApiKey) {
+    throw new Error("Tavily API key is required. Please provide your Tavily API key in the Model Settings panel.");
+  }
+  
+  let systems: AISystemProfile[];
+  try {
+    systems = await scanForAISystems(organizationContext, systemNames, tavilyApiKey);
+  } catch (error) {
+    // If Tavily fails and we have model/API keys, try AI fallback
+    if (model && apiKeys) {
+      console.warn("⚠️  Tavily research failed, using AI model fallback");
+      systems = await discoverAISystemsWithAI(organizationContext, systemNames, model, apiKeys);
+    } else {
+      throw error;
+    }
+  }
 
   // Step 2: Classify and analyze each system
   const analyzedSystems = systems.map((system) => {

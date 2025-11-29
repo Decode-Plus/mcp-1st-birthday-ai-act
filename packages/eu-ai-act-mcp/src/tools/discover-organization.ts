@@ -13,7 +13,7 @@ import type {
 } from "../types/index.js";
 import { getBrandingInfo } from "../utils/branding.js";
 import { findCompanyDomain } from "../utils/domain.js";
-import { getModel } from "../utils/model.js";
+import { getModel, type ApiKeys } from "../utils/model.js";
 
 /**
  * Known Enterprise Companies - Always classified as Enterprise regardless of content
@@ -563,9 +563,11 @@ function extractComprehensiveData(
 async function researchOrganization(
   name: string,
   domain?: string,
-  context?: string
+  context?: string,
+  tavilyApiKey?: string
 ): Promise<Partial<OrganizationProfile>> {
-  const apiKey = process.env.TAVILY_API_KEY;
+  // Use passed Tavily API key if provided, otherwise fall back to env var
+  const apiKey = tavilyApiKey || process.env.TAVILY_API_KEY;
   
   if (!apiKey) {
     console.warn("⚠️  TAVILY_API_KEY not set, using AI model for organization research");
@@ -740,12 +742,14 @@ function parseJSONResponse<T>(content: string): T | null {
 async function researchOrganizationWithAI(
   name: string,
   domain?: string,
-  context?: string
+  context?: string,
+  modelName?: string,
+  apiKeys?: ApiKeys
 ): Promise<Partial<OrganizationProfile>> {
   console.error("\n🤖 Using AI model fallback for organization research (Tavily not available)");
   
   const now = new Date().toISOString();
-  const model = getModel(undefined, undefined, "discover_organization");
+  const model = getModel(modelName, apiKeys, "discover_organization");
   
   // Check if it's a known enterprise company
   const isEnterprise = isKnownEnterpriseCompany(name);
@@ -872,7 +876,7 @@ Focus on providing accurate information based on your knowledge. If uncertain, m
         dataSource: "ai-model-research",
         aiGeneratedProfile: {
           description: parsedData.description,
-          modelUsed: process.env.AI_MODEL || "claude-4.5",
+          modelUsed: modelName || "unknown",
         },
       },
     };
@@ -1013,16 +1017,33 @@ function enrichWithAIActContext(
  * Main organization discovery function
  */
 export async function discoverOrganization(
-  input: DiscoverOrganizationInput
+  input: DiscoverOrganizationInput & { model?: string; apiKeys?: ApiKeys; tavilyApiKey?: string }
 ): Promise<OrganizationProfile> {
-  const { organizationName, domain, context } = input;
+  const { organizationName, domain, context, model, apiKeys, tavilyApiKey } = input;
 
   // Step 1: Research organization details
-  const researchedData = await researchOrganization(
-    organizationName,
-    domain,
-    context
-  );
+  // Use ONLY passed parameters from Gradio UI - NEVER read from process.env!
+  if (!tavilyApiKey) {
+    throw new Error("Tavily API key is required. Please provide your Tavily API key in the Model Settings panel.");
+  }
+  
+  let researchedData: Partial<OrganizationProfile>;
+  try {
+    researchedData = await researchOrganization(
+      organizationName,
+      domain,
+      context,
+      tavilyApiKey
+    );
+  } catch (error) {
+    // If Tavily fails and we have model/API keys, try AI fallback
+    if (model && apiKeys) {
+      console.warn("⚠️  Tavily research failed, using AI model fallback");
+      researchedData = await researchOrganizationWithAI(organizationName, domain, context, model, apiKeys);
+    } else {
+      throw error;
+    }
+  }
 
   console.error("Raw result:", JSON.stringify(researchedData, null, 2));
 
