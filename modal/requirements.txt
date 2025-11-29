@@ -1,0 +1,4 @@
+# Modal CLI and dependencies
+modal>=0.64.0
+aiohttp>=3.9.0
+

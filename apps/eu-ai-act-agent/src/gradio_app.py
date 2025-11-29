@@ -25,6 +25,26 @@ API_TIMEOUT = 600  # seconds - increased for long-running compliance assessments
 
 # Model Configuration
 AVAILABLE_MODELS = {
+    "gpt-oss": {
+        "name": "🆓 GPT-OSS 20B (Modal - FREE)",
+        "api_key_env": "MODAL_ENDPOINT_URL",
+        "description": "Free OpenAI GPT-OSS 20B model hosted on Modal.com - No API key required!"
+    },
+    "claude-4.5": {
+        "name": "Claude 4.5 Sonnet (Anthropic)",
+        "api_key_env": "ANTHROPIC_API_KEY",
+        "description": "Anthropic's latest Claude Sonnet model"
+    },
+    "claude-opus": {
+        "name": "Claude Opus 4 (Anthropic)",
+        "api_key_env": "ANTHROPIC_API_KEY",
+        "description": "Anthropic's most powerful Claude model"
+    },
+    "gemini-3": {
+        "name": "Gemini 3 Pro (Google)",
+        "api_key_env": "GOOGLE_GENERATIVE_AI_API_KEY",
+        "description": "Google's advanced reasoning model with thinking"
+    },
     "gpt-5": {
         "name": "GPT-5 (OpenAI)",
         "api_key_env": "OPENAI_API_KEY",
@@ -35,23 +55,22 @@ AVAILABLE_MODELS = {
         "api_key_env": "XAI_API_KEY",
         "description": "xAI's fast reasoning model"
     },
-    "claude-4.5": {
-        "name": "Claude 4.5 Sonnet (Anthropic)",
-        "api_key_env": "ANTHROPIC_API_KEY",
-        "description": "Anthropic's latest Claude model"
-    }
 }
 
 # Current model settings (can be updated via UI)
 # SECURITY: Store user-provided keys for this session only
-# NOTE: API keys are REQUIRED - no backend keys are provided
+# NOTE: API keys are REQUIRED for paid models - GPT-OSS is FREE!
+# IMPORTANT: Always default to gpt-oss (FREE model) regardless of env var
+# The env var might be set for the API server, but the UI should default to FREE model
 current_model_settings = {
-    "model": os.getenv("AI_MODEL", "claude-4.5"),  # Default to Anthropic (hackathon host!)
-    # User-provided keys (REQUIRED - no backend fallback)
+    "model": "gpt-oss",  # Always default to FREE GPT-OSS model in UI!
+    # User-provided keys (REQUIRED for paid models, optional for GPT-OSS)
     "openai_api_key": "",
     "xai_api_key": "",
     "anthropic_api_key": "",
-    "tavily_api_key": ""  # Required for web research & organization discovery
+    "google_api_key": "",  # Google Generative AI API key
+    "tavily_api_key": "",  # Required for web research & organization discovery
+    "modal_endpoint_url": "https://vasilis--gpt-oss-vllm-inference-serve.modal.run"  # Hardcoded Modal.com endpoint for GPT-OSS (no trailing slash!)
 }
 
 # Thread-safe cancellation flag for stopping ongoing requests
@@ -405,25 +424,31 @@ def get_api_headers() -> dict:
     """Get headers with model configuration for API requests
     
     SECURITY: Only pass model selection and user-provided API keys.
-    API keys are REQUIRED - no backend keys are provided.
-    User must provide their own keys via the Model Settings UI.
+    API keys are REQUIRED for paid models - GPT-OSS is FREE!
+    User must provide their own keys via the Model Settings UI (except for GPT-OSS).
     """
     headers = {"Content-Type": "application/json"}
     
-    # Pass model selection
-    if current_model_settings["model"]:
-        headers["X-AI-Model"] = current_model_settings["model"]
+    # Pass model selection - always use the current model setting
+    selected_model = current_model_settings.get("model", "gpt-oss")
+    headers["X-AI-Model"] = selected_model
+    print(f"[Gradio] Sending model to API: {selected_model}")
     
-    # Pass user-provided API keys (REQUIRED - no backend fallback)
+    # Pass user-provided API keys based on selected model
     model = current_model_settings["model"]
-    if model == "gpt-5" and current_model_settings["openai_api_key"]:
+    if model == "gpt-oss":
+        # GPT-OSS uses hardcoded Modal endpoint URL (FREE - no API key required!)
+        headers["X-Modal-Endpoint-URL"] = current_model_settings["modal_endpoint_url"]
+    elif model == "gpt-5" and current_model_settings["openai_api_key"]:
         headers["X-OpenAI-API-Key"] = current_model_settings["openai_api_key"]
     elif model == "grok-4-1" and current_model_settings["xai_api_key"]:
         headers["X-XAI-API-Key"] = current_model_settings["xai_api_key"]
-    elif model == "claude-4.5" and current_model_settings["anthropic_api_key"]:
+    elif model in ["claude-4.5", "claude-opus"] and current_model_settings["anthropic_api_key"]:
         headers["X-Anthropic-API-Key"] = current_model_settings["anthropic_api_key"]
+    elif model == "gemini-3" and current_model_settings["google_api_key"]:
+        headers["X-Google-API-Key"] = current_model_settings["google_api_key"]
     
-    # Tavily API key for web research (REQUIRED for organization discovery)
+    # Tavily API key for web research (optional - AI model used as fallback)
     if current_model_settings["tavily_api_key"]:
         headers["X-Tavily-API-Key"] = current_model_settings["tavily_api_key"]
     
@@ -897,6 +922,7 @@ with gr.Blocks(
             const stored = [];
             if (keys.tavily) { this.storeKey('tavily', keys.tavily); stored.push('Tavily'); }
             if (keys.anthropic) { this.storeKey('anthropic', keys.anthropic); stored.push('Anthropic'); }
+            if (keys.google) { this.storeKey('google', keys.google); stored.push('Google'); }
             if (keys.openai) { this.storeKey('openai', keys.openai); stored.push('OpenAI'); }
             if (keys.xai) { this.storeKey('xai', keys.xai); stored.push('xAI'); }
             return stored;
@@ -907,6 +933,7 @@ with gr.Blocks(
             return {
                 tavily: this.getKey('tavily'),
                 anthropic: this.getKey('anthropic'),
+                google: this.getKey('google'),
                 openai: this.getKey('openai'),
                 xai: this.getKey('xai')
             };
@@ -915,13 +942,14 @@ with gr.Blocks(
         // Check if any keys are stored
         hasStoredKeys: function() {
             const keys = this.getAllKeys();
-            return !!(keys.tavily || keys.anthropic || keys.openai || keys.xai);
+            return !!(keys.tavily || keys.anthropic || keys.google || keys.openai || keys.xai);
         },
         
         // Clear all stored keys
         clearAllKeys: function() {
             this._deleteCookie('tavily');
             this._deleteCookie('anthropic');
+            this._deleteCookie('google');
             this._deleteCookie('openai');
             this._deleteCookie('xai');
             console.log('[SecureKeyStorage] All keys cleared');
@@ -936,38 +964,76 @@ with gr.Blocks(
         const keys = SecureKeyStorage.getAllKeys();
         let populated = [];
         
-        // Find Gradio input elements by their labels
+        // Find Gradio input elements by their element IDs or labels
         // Gradio 4.x uses specific data attributes and structure
         setTimeout(() => {
-            const inputs = document.querySelectorAll('input[type="password"]');
+            // Try to find inputs by elem_id first (more reliable)
+            const tavilyInput = document.querySelector('#tavily_key_input input[type="password"]');
+            const anthropicInput = document.querySelector('#anthropic_key_input input[type="password"]');
+            const googleInput = document.querySelector('#google_key_input input[type="password"]');
+            const openaiInput = document.querySelector('#openai_key_input input[type="password"]');
+            const xaiInput = document.querySelector('#xai_key_input input[type="password"]');
             
-            inputs.forEach(input => {
-                // Find the label associated with this input
-                const container = input.closest('.gradio-textbox, .gr-textbox, [class*="textbox"]');
-                if (!container) return;
-                
-                const label = container.querySelector('label, span.label-text, [data-testid="label"]');
-                const labelText = label ? label.textContent.toLowerCase() : '';
-                
-                // Match labels to keys
-                if (labelText.includes('tavily') && keys.tavily) {
-                    input.value = keys.tavily;
-                    input.dispatchEvent(new Event('input', { bubbles: true }));
-                    populated.push('Tavily');
-                } else if (labelText.includes('anthropic') && keys.anthropic) {
-                    input.value = keys.anthropic;
-                    input.dispatchEvent(new Event('input', { bubbles: true }));
-                    populated.push('Anthropic');
-                } else if (labelText.includes('openai') && keys.openai) {
-                    input.value = keys.openai;
-                    input.dispatchEvent(new Event('input', { bubbles: true }));
-                    populated.push('OpenAI');
-                } else if (labelText.includes('xai') && keys.xai) {
-                    input.value = keys.xai;
-                    input.dispatchEvent(new Event('input', { bubbles: true }));
-                    populated.push('xAI');
-                }
-            });
+            // Populate from cookies
+            if (tavilyInput && keys.tavily) {
+                tavilyInput.value = keys.tavily;
+                tavilyInput.dispatchEvent(new Event('input', { bubbles: true }));
+                populated.push('Tavily');
+            }
+            if (anthropicInput && keys.anthropic) {
+                anthropicInput.value = keys.anthropic;
+                anthropicInput.dispatchEvent(new Event('input', { bubbles: true }));
+                populated.push('Anthropic');
+            }
+            if (googleInput && keys.google) {
+                googleInput.value = keys.google;
+                googleInput.dispatchEvent(new Event('input', { bubbles: true }));
+                populated.push('Google');
+            }
+            if (openaiInput && keys.openai) {
+                openaiInput.value = keys.openai;
+                openaiInput.dispatchEvent(new Event('input', { bubbles: true }));
+                populated.push('OpenAI');
+            }
+            if (xaiInput && keys.xai) {
+                xaiInput.value = keys.xai;
+                xaiInput.dispatchEvent(new Event('input', { bubbles: true }));
+                populated.push('xAI');
+            }
+            
+            // Fallback: try finding by label text if elem_id didn't work
+            if (populated.length === 0) {
+                const inputs = document.querySelectorAll('input[type="password"]');
+                inputs.forEach(input => {
+                    const container = input.closest('.gradio-textbox, .gr-textbox, [class*="textbox"]');
+                    if (!container) return;
+                    
+                    const label = container.querySelector('label, span.label-text, [data-testid="label"]');
+                    const labelText = label ? label.textContent.toLowerCase() : '';
+                    
+                    if (labelText.includes('tavily') && keys.tavily && !input.value) {
+                        input.value = keys.tavily;
+                        input.dispatchEvent(new Event('input', { bubbles: true }));
+                        populated.push('Tavily');
+                    } else if (labelText.includes('anthropic') && keys.anthropic && !input.value) {
+                        input.value = keys.anthropic;
+                        input.dispatchEvent(new Event('input', { bubbles: true }));
+                        populated.push('Anthropic');
+                    } else if (labelText.includes('google') && keys.google && !input.value) {
+                        input.value = keys.google;
+                        input.dispatchEvent(new Event('input', { bubbles: true }));
+                        populated.push('Google');
+                    } else if (labelText.includes('openai') && keys.openai && !input.value) {
+                        input.value = keys.openai;
+                        input.dispatchEvent(new Event('input', { bubbles: true }));
+                        populated.push('OpenAI');
+                    } else if (labelText.includes('xai') && keys.xai && !input.value) {
+                        input.value = keys.xai;
+                        input.dispatchEvent(new Event('input', { bubbles: true }));
+                        populated.push('xAI');
+                    }
+                });
+            }
             
             if (populated.length > 0) {
                 console.log('[SecureKeyStorage] Loaded keys from cookies:', populated.join(', '));
@@ -986,7 +1052,7 @@ with gr.Blocks(
                     }
                 }, 500);
             }
-        }, 1000); // Wait for Gradio to fully render
+        }, 1500); // Wait for Gradio to fully render
     }
     
     // Show notification when keys are loaded from cookies
@@ -1255,48 +1321,63 @@ with gr.Blocks(
             
             model_dropdown = gr.Dropdown(
                 choices=[(v["name"], k) for k, v in AVAILABLE_MODELS.items()],
-                value="claude-4.5",  # Default to Anthropic (hackathon host!)
+                value=current_model_settings["model"],  # Use current model setting
                 label="AI Model",
-                info="Select the AI model to use"
+                info="Select the AI model to use (GPT-OSS is FREE!)"
             )
             
-            # API Key inputs (password fields) - REQUIRED: No backend keys provided
-            with gr.Accordion("🔑 API Keys (Required)", open=True):
-                gr.Markdown("""⚠️ **API keys are required to use this service.**
+            # API Key inputs (password fields) - GPT-OSS is FREE, other models require API keys
+            with gr.Accordion("🔑 API Keys & Settings", open=True):
+                gr.Markdown("""🆓 **GPT-OSS 20B is FREE** - Uses pre-configured Modal endpoint (no setup required).
+
+⚠️ For paid models (Claude, GPT-5, Gemini, Grok), an API key is required.
 
 🔐 Keys are stored securely in encoded cookies and **auto-expire after 24 hours**.
-Your keys persist across page refreshes but are automatically cleared for security.""")
+
+ℹ️ *Tavily is optional - enhances web research but AI model works as fallback.*""")
                 
-                gr.Markdown("#### 🔍 Research API")
+                gr.Markdown("#### 🔍 Research API (Optional)")
                 tavily_key = gr.Textbox(
-                    label="Tavily API Key *",
-                    placeholder="tvly-... (required for web research)",
+                    label="Tavily API Key (Optional)",
+                    placeholder="tvly-... (optional - enhances web research)",
                     type="password",
                     value="",  # Will be populated from cookies via JS
-                    info="Required - for web research & organization discovery"
+                    info="Optional - enhances web research. AI model used as fallback.",
+                    elem_id="tavily_key_input"
                 )
                 
                 gr.Markdown("#### 🤖 AI Model APIs")
                 anthropic_key = gr.Textbox(
                     label="Anthropic API Key *",
-                    placeholder="sk-ant-... (required for Claude 4.5)",
+                    placeholder="sk-ant-... (required for Claude models)",
                     type="password",
                     value="",  # Will be populated from cookies via JS
-                    info="Required - for Claude 4.5 (default model)"
+                    info="Required - for Claude 4.5 Sonnet or Claude Opus 4",
+                    elem_id="anthropic_key_input"
+                )
+                google_key = gr.Textbox(
+                    label="Google API Key",
+                    placeholder="AIza... (required for Gemini 3)",
+                    type="password",
+                    value="",  # Will be populated from cookies via JS
+                    info="Required if using Gemini 3 Pro model",
+                    elem_id="google_key_input"
                 )
                 openai_key = gr.Textbox(
                     label="OpenAI API Key",
                     placeholder="sk-... (required for GPT-5)",
                     type="password",
                     value="",  # Will be populated from cookies via JS
-                    info="Required if using GPT-5 model"
+                    info="Required if using GPT-5 model",
+                    elem_id="openai_key_input"
                 )
                 xai_key = gr.Textbox(
                     label="xAI API Key",
                     placeholder="xai-... (required for Grok 4.1)",
                     type="password",
                     value="",  # Will be populated from cookies via JS
-                    info="Required if using Grok 4.1 model"
+                    info="Required if using Grok 4.1 model",
+                    elem_id="xai_key_input"
                 )
                 with gr.Row():
                     save_keys_btn = gr.Button("💾 Save Keys", variant="secondary", size="sm")
@@ -1385,28 +1466,31 @@ Your keys persist across page refreshes but are automatically cleared for securi
         """Update the selected model"""
         current_model_settings["model"] = model_value
         model_info = AVAILABLE_MODELS.get(model_value, {})
+        print(f"[Gradio] Model updated to: {model_value} ({model_info.get('name', model_value)})")
         return f"✅ Model set to: **{model_info.get('name', model_value)}**"
     
-    def save_api_keys(tavily_val, anthropic_val, openai_val, xai_val):
+    def save_api_keys(tavily_val, anthropic_val, google_val, openai_val, xai_val):
         """Save user-provided API keys to session AND secure cookie storage
         
         SECURITY: Keys are stored in memory for this session AND in encoded cookies
         that expire after 1 day. Cookies use XOR obfuscation + base64 encoding.
-        API keys are REQUIRED - no backend keys are provided.
+        GPT-OSS is FREE and uses pre-configured Modal endpoint from environment.
+        Paid models require API keys. Note: Tavily is OPTIONAL - AI model is used as fallback for research.
         """
         saved = []
-        missing = []
         
         # Only update if a real key is provided
         if tavily_val and len(tavily_val) > 10:
             current_model_settings["tavily_api_key"] = tavily_val
             saved.append("Tavily")
-        else:
-            missing.append("Tavily")
         
         if anthropic_val and len(anthropic_val) > 10:
             current_model_settings["anthropic_api_key"] = anthropic_val
             saved.append("Anthropic")
+        
+        if google_val and len(google_val) > 10:
+            current_model_settings["google_api_key"] = google_val
+            saved.append("Google")
         
         if openai_val and len(openai_val) > 10:
             current_model_settings["openai_api_key"] = openai_val
@@ -1419,28 +1503,29 @@ Your keys persist across page refreshes but are automatically cleared for securi
         # Build status message
         status_parts = []
         if saved:
-            status_parts.append(f"✅ Keys saved: {', '.join(saved)}")
-            status_parts.append("🔐 *Keys stored in secure cookies (expires in 24h)*")
+            status_parts.append(f"✅ Saved: {', '.join(saved)}")
+            status_parts.append("🔐 *Stored in secure cookies (expires in 24h)*")
         
         # Check for missing required keys based on selected model
         model = current_model_settings["model"]
-        model_key_missing = False
-        if model == "claude-4.5" and not current_model_settings["anthropic_api_key"]:
-            model_key_missing = True
-            status_parts.append("⚠️ **Anthropic API key required** for Claude 4.5")
+        if model == "gpt-oss":
+            # GPT-OSS uses hardcoded Modal endpoint - always available
+            status_parts.append("🆓 *GPT-OSS model is FREE - using hardcoded endpoint!*")
+        elif model in ["claude-4.5", "claude-opus"] and not current_model_settings["anthropic_api_key"]:
+            status_parts.append(f"⚠️ **Anthropic API key required** for {model}")
+        elif model == "gemini-3" and not current_model_settings["google_api_key"]:
+            status_parts.append("⚠️ **Google API key required** for Gemini 3")
         elif model == "gpt-5" and not current_model_settings["openai_api_key"]:
-            model_key_missing = True
             status_parts.append("⚠️ **OpenAI API key required** for GPT-5")
         elif model == "grok-4-1" and not current_model_settings["xai_api_key"]:
-            model_key_missing = True
             status_parts.append("⚠️ **xAI API key required** for Grok 4.1")
         
-        # Tavily is always required for research tools
-        if "Tavily" in missing:
-            status_parts.append("⚠️ **Tavily API key required** for web research")
+        # Tavily is optional - just inform user about enhanced features if they have it
+        if not current_model_settings["tavily_api_key"]:
+            status_parts.append("ℹ️ *Tavily not set - AI model will be used for web research*")
         
         if not status_parts:
-            return "✅ All required keys configured!\n\n🔐 *Keys stored in secure cookies (expires in 24h)*"
+            return "✅ All configured!\n\n🔐 *Stored in secure cookies (expires in 24h)*"
         
         return "\n\n".join(status_parts)
     
@@ -1466,21 +1551,28 @@ Your keys persist across page refreshes but are automatically cleared for securi
         Returns a tuple of (is_valid, error_message)
         - is_valid: True if all required keys are present
         - error_message: Description of missing keys if not valid
+        
+        Note: GPT-OSS is FREE and only needs Modal endpoint URL.
+        Tavily API key is optional - the system will fallback to AI model for research.
         """
         missing_keys = []
         
         # Check model API key based on selected model
         model = current_model_settings["model"]
-        if model == "claude-4.5" and not current_model_settings["anthropic_api_key"]:
-            missing_keys.append("**Anthropic API Key** (required for Claude 4.5)")
+        if model == "gpt-oss":
+            # GPT-OSS uses hardcoded endpoint - no check needed
+            pass
+        elif model in ["claude-4.5", "claude-opus"] and not current_model_settings["anthropic_api_key"]:
+            missing_keys.append(f"**Anthropic API Key** (required for {model})")
+        elif model == "gemini-3" and not current_model_settings["google_api_key"]:
+            missing_keys.append("**Google API Key** (required for Gemini 3)")
         elif model == "gpt-5" and not current_model_settings["openai_api_key"]:
             missing_keys.append("**OpenAI API Key** (required for GPT-5)")
         elif model == "grok-4-1" and not current_model_settings["xai_api_key"]:
             missing_keys.append("**xAI API Key** (required for Grok 4.1)")
         
-        # Tavily is required for web research and organization discovery
-        if not current_model_settings["tavily_api_key"]:
-            missing_keys.append("**Tavily API Key** (required for web research & organization discovery)")
+        # Note: Tavily is OPTIONAL - system will fallback to AI model for research
+        # We no longer require Tavily API key
         
         if missing_keys:
             error_msg = """## ⚠️ API Keys Required
@@ -1494,16 +1586,22 @@ To use this service, you need to provide your own API keys. The following keys a
             error_msg += """
 ### How to add your API keys:
 
-1. Expand the **🔑 API Keys (Required)** section in the sidebar
+1. Expand the **🔑 API Keys & Settings** section in the sidebar
 2. Enter your API keys in the corresponding fields
 3. Click **💾 Save Keys**
 
 ### Where to get API keys:
 
-- **Tavily**: [tavily.com](https://tavily.com) - Sign up for free tier
 - **Anthropic**: [console.anthropic.com](https://console.anthropic.com) - Get Claude API key
+- **Google**: [aistudio.google.com](https://aistudio.google.com/apikey) - Get Gemini API key
 - **OpenAI**: [platform.openai.com](https://platform.openai.com) - Get GPT API key
 - **xAI**: [console.x.ai](https://console.x.ai) - Get Grok API key
+
+**🆓 FREE Alternative:**
+- Select **GPT-OSS 20B** from the model dropdown - it's FREE via Modal.com!
+
+**Optional:**
+- **Tavily**: [tavily.com](https://tavily.com) - For enhanced web research (AI model will be used as fallback)
 """
             return False, error_msg
         
@@ -1533,7 +1631,11 @@ To use this service, you need to provide your own API keys. The following keys a
         cancel_token.reset()
             
         # First yield: clear input, show loading, and show stop button
-        model_name = AVAILABLE_MODELS.get(current_model_settings["model"], {}).get("name", current_model_settings["model"])
+        # Get the actual selected model from current_model_settings (not from env)
+        selected_model = current_model_settings.get("model", "gpt-oss")
+        model_info = AVAILABLE_MODELS.get(selected_model, {})
+        model_name = model_info.get("name", selected_model)
+        print(f"[Gradio] Using model: {selected_model} ({model_name})")
         initial_history = list(history) + [
             ChatMessage(role="user", content=message),
             ChatMessage(role="assistant", content=f"⏳ *Thinking with {model_name}...*")
@@ -1601,15 +1703,16 @@ To use this service, you need to provide your own API keys. The following keys a
     # The _js parameter runs after the Python function completes
     save_keys_btn.click(
         save_api_keys, 
-        [tavily_key, anthropic_key, openai_key, xai_key], 
+        [tavily_key, anthropic_key, google_key, openai_key, xai_key], 
         [keys_status],
         js="""
-        (tavily, anthropic, openai, xai) => {
+        (tavily, anthropic, google, openai, xai) => {
             // Store keys in secure cookies using our SecureKeyStorage
             if (window.SecureKeyStorage) {
                 const stored = window.SecureKeyStorage.storeAllKeys({
                     tavily: tavily,
                     anthropic: anthropic,
+                    google: google,
                     openai: openai,
                     xai: xai
                 });
@@ -1617,7 +1720,7 @@ To use this service, you need to provide your own API keys. The following keys a
                     console.log('[SecureKeyStorage] Stored to cookies:', stored.join(', '));
                 }
             }
-            return [tavily, anthropic, openai, xai];
+            return [tavily, anthropic, google, openai, xai];
         }
         """
     )
@@ -1625,17 +1728,19 @@ To use this service, you need to provide your own API keys. The following keys a
     # Clear keys function - clears both session and cookies
     def clear_api_keys():
         """Clear all stored API keys from session and cookies"""
+        # Note: modal_endpoint_url is hardcoded, so we don't clear it
         current_model_settings["tavily_api_key"] = ""
         current_model_settings["anthropic_api_key"] = ""
+        current_model_settings["google_api_key"] = ""
         current_model_settings["openai_api_key"] = ""
         current_model_settings["xai_api_key"] = ""
-        return "", "", "", "", "🗑️ All API keys cleared from session and cookies"
+        return "", "", "", "", "", "🗑️ All settings cleared from session and cookies"
     
     # Clear keys handler with JavaScript to clear cookies
     clear_keys_btn.click(
         clear_api_keys,
         [],
-        [tavily_key, anthropic_key, openai_key, xai_key, keys_status],
+        [tavily_key, anthropic_key, google_key, openai_key, xai_key, keys_status],
         js="""
         () => {
             // Clear keys from secure cookies

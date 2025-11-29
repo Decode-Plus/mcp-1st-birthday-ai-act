@@ -6,23 +6,37 @@
  * and retrieve tools dynamically.
  * 
  * Environment Variable:
- * - AI_MODEL: "claude-4.5" | "gpt-5" | "grok-4-1" (default: "claude-4.5")
+ * - AI_MODEL: "gpt-oss" | "claude-4.5" | "claude-opus" | "gpt-5" | "grok-4-1" | "gemini-3" (default: "gpt-oss")
  * 
  * Supported Models:
- * - claude-4.5: Anthropic Claude Sonnet 4.5 (requires ANTHROPIC_API_KEY) - DEFAULT
+ * - gpt-oss: OpenAI GPT-OSS 20B via Modal.com (FREE - requires MODAL_ENDPOINT_URL) - DEFAULT
+ * - claude-4.5: Anthropic Claude Sonnet 4.5 (requires ANTHROPIC_API_KEY)
+ * - claude-opus: Anthropic Claude Opus 4 (requires ANTHROPIC_API_KEY)
  * - gpt-5: OpenAI GPT-5 (requires OPENAI_API_KEY)
  * - grok-4-1: xAI Grok 4.1 Fast Reasoning (requires XAI_API_KEY)
+ * - gemini-3: Google Gemini 3 Pro (requires GOOGLE_GENERATIVE_AI_API_KEY)
  */
 
-import { xai } from "@ai-sdk/xai";
 import { generateText, stepCountIs, streamText } from "ai";
 import { experimental_createMCPClient as createMCPClient } from "@ai-sdk/mcp";
 import { Experimental_StdioMCPTransport as StdioMCPTransport } from "@ai-sdk/mcp/mcp-stdio";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-import { SYSTEM_PROMPT } from "./prompts.js";
-import { openai } from "@ai-sdk/openai";
-import { anthropic } from "@ai-sdk/anthropic";
+import { SYSTEM_PROMPT, SYSTEM_PROMPT_GPT_OSS } from "./prompts.js";
+import { getModel } from "@eu-ai-act/mcp-server";
+
+/**
+ * Get the appropriate system prompt based on the model
+ * GPT-OSS uses a shorter prompt to fit within context limits
+ */
+function getSystemPrompt(): string {
+  const modelEnv = process.env.AI_MODEL || "gpt-oss";
+  if (modelEnv === "gpt-oss") {
+    console.log("[Agent] Using shorter system prompt for GPT-OSS");
+    return SYSTEM_PROMPT_GPT_OSS;
+  }
+  return SYSTEM_PROMPT;
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -183,35 +197,7 @@ function validateToolResult(toolName: string, result: any): any {
   return result;
 }
 
-/**
- * Get the AI model based on AI_MODEL environment variable
- * Supports: "gpt-5" (OpenAI), "grok-4-1" (xAI), or "claude-4.5" (Anthropic)
- */
-function getModel() {
-  const modelEnv = process.env.AI_MODEL || "claude-4.5";  // Default to Anthropic (hackathon host!)
-  
-  console.log(`[Agent] Using AI model: ${modelEnv}`);
-  
-  if (modelEnv === "grok-4-1") {
-    if (!process.env.XAI_API_KEY) {
-      throw new Error("XAI_API_KEY environment variable is required when using grok-4-1");
-    }
-    return xai("grok-4-1-fast-reasoning");
-  }
-  
-  if (modelEnv === "claude-4.5") {
-    if (!process.env.ANTHROPIC_API_KEY) {
-      throw new Error("ANTHROPIC_API_KEY environment variable is required when using claude-4.5");
-    }
-    return anthropic("claude-sonnet-4-5-20250514");
-  }
-  
-  // Default to GPT-5
-  if (!process.env.OPENAI_API_KEY) {
-    throw new Error("OPENAI_API_KEY environment variable is required when using gpt-5");
-  }
-  return openai("gpt-5");
-}
+// getModel is now imported from @eu-ai-act/mcp-server
 
 /**
  * Create MCP client and retrieve tools
@@ -246,7 +232,11 @@ async function createMCPClientWithTools() {
  * Create EU AI Act compliance agent
  */
 export function createAgent() {
-  const model = getModel();
+  // Log the model being used
+  const modelEnv = process.env.AI_MODEL || "gpt-oss";
+  console.log(`[Agent] Creating agent with AI_MODEL=${modelEnv}`);
+  const model = getModel(undefined, "agent");
+  console.log(`[Agent] Model instance created: ${model.constructor.name}`);
   return {
     /**
      * Generate a single response
@@ -255,10 +245,11 @@ export function createAgent() {
       const { client, tools } = await createMCPClientWithTools();
 
       try {
+        const systemPrompt = getSystemPrompt();
         const result = await generateText({
           model,
           messages: [
-            { role: "system", content: SYSTEM_PROMPT },
+            { role: "system", content: systemPrompt },
             ...params.messages,
           ],
           // MCP tools are compatible at runtime but have different TypeScript types
@@ -272,6 +263,12 @@ export function createAgent() {
             },
             openai: {
               reasoningEffort: "low",  // Low reasoning effort for GPT - faster responses
+            },
+            google: {
+              thinkingConfig: {
+                thinkingLevel: "low",  // Low thinking for faster responses
+                includeThoughts: true,
+              },
             },
           },
         });
@@ -380,11 +377,12 @@ export function createAgent() {
      */
     async streamText(params: { messages: any[] }) {
       const { client, tools } = await createMCPClientWithTools();
+      const systemPrompt = getSystemPrompt();
 
       const result = streamText({
         model,
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
+          { role: "system", content: systemPrompt },
           ...params.messages,
         ],
         // MCP tools are compatible at runtime but have different TypeScript types
@@ -398,6 +396,12 @@ export function createAgent() {
           },
           openai: {
             reasoningEffort: "low",  // Low reasoning effort for GPT - faster responses
+          },
+          google: {
+            thinkingConfig: {
+              thinkingLevel: "low",  // Low thinking for faster responses
+              includeThoughts: true,
+            },
           },
         },
         // Log each step for debugging

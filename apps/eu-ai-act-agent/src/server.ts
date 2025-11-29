@@ -13,6 +13,11 @@ import { config } from "dotenv";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { createAgent } from "./agent/index.js";
+import { 
+  discoverOrganization, 
+  discoverAIServices, 
+  assessCompliance 
+} from "@eu-ai-act/mcp-server";
 
 // Load environment variables from project root
 const __filename = fileURLToPath(import.meta.url);
@@ -196,18 +201,28 @@ app.post("/api/chat", async (req, res) => {
     
     // SECURITY: Only read user-provided keys from headers if they want to override
     // Backend environment keys are the PRIMARY source and are NEVER exposed to frontend
+    const modalEndpointHeader = req.headers["x-modal-endpoint-url"] as string;
     const openaiKeyHeader = req.headers["x-openai-api-key"] as string;
     const xaiKeyHeader = req.headers["x-xai-api-key"] as string;
     const anthropicKeyHeader = req.headers["x-anthropic-api-key"] as string;
+    const googleKeyHeader = req.headers["x-google-api-key"] as string;
     const tavilyKeyHeader = req.headers["x-tavily-api-key"] as string;
 
-    // Set model selection if provided (default to claude-4.5 for Anthropic hackathon!)
+    // Set model selection if provided (default to gpt-oss for FREE model!)
     if (modelHeader) {
       process.env.AI_MODEL = modelHeader;
-      console.log(`[API] Model set via header: ${modelHeader}`);
+      console.log(`[API] Model set via header: ${modelHeader} (overriding any env default)`);
     } else if (!process.env.AI_MODEL) {
-      process.env.AI_MODEL = "claude-4.5";
-      console.log(`[API] Using default model: claude-4.5 (Anthropic)`);
+      process.env.AI_MODEL = "gpt-oss";
+      console.log(`[API] Using default model: gpt-oss (FREE via Modal)`);
+    } else {
+      console.log(`[API] Using existing AI_MODEL from env: ${process.env.AI_MODEL}`);
+    }
+    
+    // Modal endpoint URL for GPT-OSS (FREE model)
+    if (modalEndpointHeader && modalEndpointHeader.length > 10) {
+      process.env.MODAL_ENDPOINT_URL = modalEndpointHeader;
+      console.log(`[API] Using user-provided Modal endpoint: ${modalEndpointHeader}`);
     }
     
     // Only override env keys if user explicitly provides their own keys
@@ -223,6 +238,10 @@ app.post("/api/chat", async (req, res) => {
     if (anthropicKeyHeader && anthropicKeyHeader.length > 10) {
       process.env.ANTHROPIC_API_KEY = anthropicKeyHeader;
       console.log(`[API] Using user-provided Anthropic API key`);
+    }
+    if (googleKeyHeader && googleKeyHeader.length > 10) {
+      process.env.GOOGLE_GENERATIVE_AI_API_KEY = googleKeyHeader;
+      console.log(`[API] Using user-provided Google API key`);
     }
     if (tavilyKeyHeader && tavilyKeyHeader.length > 10) {
       process.env.TAVILY_API_KEY = tavilyKeyHeader;
@@ -242,10 +261,37 @@ app.post("/api/chat", async (req, res) => {
     const agent = createAgent();
 
     // Convert history to messages format
-    const messages = history.map((msg: any) => ({
+    let messages = history.map((msg: any) => ({
       role: msg.role,
       content: msg.content,
     }));
+
+    // For GPT-OSS (smaller model), limit history to avoid context overflow
+    // GPT-OSS 20B has ~8K-16K context window, and our system prompt is ~3K tokens
+    // Use the model from header (set by Gradio UI), fallback to env var
+    const selectedModel = modelHeader || process.env.AI_MODEL || "gpt-oss";
+    const isGptOss = selectedModel === "gpt-oss";
+    if (isGptOss && messages.length > 0) {
+      // Limit to last 4 turns (8 messages) for GPT-OSS
+      const MAX_HISTORY_MESSAGES = 8;
+      if (messages.length > MAX_HISTORY_MESSAGES) {
+        console.log(`[API] GPT-OSS: Trimming history from ${messages.length} to ${MAX_HISTORY_MESSAGES} messages`);
+        messages = messages.slice(-MAX_HISTORY_MESSAGES);
+      }
+      
+      // Also truncate very long assistant messages (e.g., tool results)
+      const MAX_MESSAGE_LENGTH = 2000;
+      messages = messages.map((msg: any) => {
+        if (msg.role === "assistant" && msg.content && msg.content.length > MAX_MESSAGE_LENGTH) {
+          console.log(`[API] GPT-OSS: Truncating long assistant message (${msg.content.length} chars)`);
+          return {
+            ...msg,
+            content: msg.content.substring(0, MAX_MESSAGE_LENGTH) + "\n\n[...truncated for context limits...]",
+          };
+        }
+        return msg;
+      });
+    }
 
     // Add current message
     messages.push({
@@ -253,7 +299,7 @@ app.post("/api/chat", async (req, res) => {
       content: message,
     });
 
-    console.log("Starting stream for message:", message);
+    console.log(`Starting stream for message: ${message} (history: ${messages.length - 1} messages)`);
     
     // First pass - stream the response
     const result = await agent.streamText({ messages });
@@ -264,13 +310,9 @@ app.post("/api/chat", async (req, res) => {
     // Check if this looks like an organization analysis that needs more tool calls
     const hasOrgDiscovery = toolsCalled.has("discover_organization");
     const hasAIServicesDiscovery = toolsCalled.has("discover_ai_services");
-    const hasAssessCompliance = toolsCalled.has("assess_compliance");
     
     // Need AI services discovery if we have org but not AI services
     const needsAIServicesDiscovery = hasOrgDiscovery && !hasAIServicesDiscovery;
-    
-    // Need assessment if we have org/ai services but not assessment
-    const needsAssessment = (hasOrgDiscovery || hasAIServicesDiscovery) && !hasAssessCompliance;
     
     // If discover_ai_services wasn't called but discover_organization was, make a follow-up request for AI services
     if (needsAIServicesDiscovery && !hasText) {
@@ -752,6 +794,139 @@ app.get("/api/tools", async (_req, res) => {
   }
 });
 
+// ============================================================================
+// DIRECT TOOL ENDPOINTS - For ChatGPT Apps and direct API calls
+// ============================================================================
+
+/**
+ * Direct endpoint for discover_organization tool
+ * Used by ChatGPT Apps via Gradio MCP server
+ */
+app.post("/api/tools/discover_organization", async (req, res) => {
+  try {
+    const { organizationName, domain, context } = req.body;
+    
+    if (!organizationName) {
+      return res.status(400).json({ error: "organizationName is required" });
+    }
+    
+    console.log(`[API] discover_organization called for: ${organizationName}`);
+    
+    // Read API keys from headers if provided
+    const tavilyKeyHeader = req.headers["x-tavily-api-key"] as string;
+    if (tavilyKeyHeader && tavilyKeyHeader.length > 10) {
+      process.env.TAVILY_API_KEY = tavilyKeyHeader;
+    }
+    
+    const result = await discoverOrganization({
+      organizationName,
+      domain: domain || undefined,
+      context: context || undefined,
+    });
+    
+    console.log(`[API] discover_organization completed for: ${organizationName}`);
+    res.json(result);
+    
+  } catch (error) {
+    console.error("discover_organization error:", error);
+    res.status(500).json({ 
+      error: true, 
+      message: error instanceof Error ? error.message : "Unknown error" 
+    });
+  }
+});
+
+/**
+ * Direct endpoint for discover_ai_services tool
+ * Used by ChatGPT Apps via Gradio MCP server
+ */
+app.post("/api/tools/discover_ai_services", async (req, res) => {
+  try {
+    const { organizationContext, systemNames, scope, context } = req.body;
+    
+    console.log(`[API] discover_ai_services called, systemNames: ${JSON.stringify(systemNames)}`);
+    
+    // Read API keys from headers if provided
+    const tavilyKeyHeader = req.headers["x-tavily-api-key"] as string;
+    if (tavilyKeyHeader && tavilyKeyHeader.length > 10) {
+      process.env.TAVILY_API_KEY = tavilyKeyHeader;
+    }
+    
+    const result = await discoverAIServices({
+      organizationContext: organizationContext || undefined,
+      systemNames: systemNames || undefined,
+      scope: scope || undefined,
+      context: context || undefined,
+    });
+    
+    console.log(`[API] discover_ai_services completed, found ${result.systems?.length || 0} systems`);
+    res.json(result);
+    
+  } catch (error) {
+    console.error("discover_ai_services error:", error);
+    res.status(500).json({ 
+      error: true, 
+      message: error instanceof Error ? error.message : "Unknown error" 
+    });
+  }
+});
+
+/**
+ * Direct endpoint for assess_compliance tool
+ * Used by ChatGPT Apps via Gradio MCP server
+ */
+app.post("/api/tools/assess_compliance", async (req, res) => {
+  try {
+    const { organizationContext, aiServicesContext, focusAreas, generateDocumentation } = req.body;
+    
+    console.log(`[API] assess_compliance called, generateDocumentation: ${generateDocumentation}`);
+    
+    // Read model selection and API keys from headers
+    const modelHeader = req.headers["x-ai-model"] as string;
+    const anthropicKeyHeader = req.headers["x-anthropic-api-key"] as string;
+    const openaiKeyHeader = req.headers["x-openai-api-key"] as string;
+    const xaiKeyHeader = req.headers["x-xai-api-key"] as string;
+    const googleKeyHeader = req.headers["x-google-api-key"] as string;
+    const modalEndpointHeader = req.headers["x-modal-endpoint-url"] as string;
+    
+    if (modelHeader) {
+      process.env.AI_MODEL = modelHeader;
+    }
+    if (anthropicKeyHeader && anthropicKeyHeader.length > 10) {
+      process.env.ANTHROPIC_API_KEY = anthropicKeyHeader;
+    }
+    if (openaiKeyHeader && openaiKeyHeader.length > 10) {
+      process.env.OPENAI_API_KEY = openaiKeyHeader;
+    }
+    if (xaiKeyHeader && xaiKeyHeader.length > 10) {
+      process.env.XAI_API_KEY = xaiKeyHeader;
+    }
+    if (googleKeyHeader && googleKeyHeader.length > 10) {
+      process.env.GOOGLE_GENERATIVE_AI_API_KEY = googleKeyHeader;
+    }
+    if (modalEndpointHeader && modalEndpointHeader.length > 10) {
+      process.env.MODAL_ENDPOINT_URL = modalEndpointHeader;
+    }
+    
+    const result = await assessCompliance({
+      organizationContext: organizationContext || undefined,
+      aiServicesContext: aiServicesContext || undefined,
+      focusAreas: focusAreas || undefined,
+      generateDocumentation: generateDocumentation !== false, // Default true
+    });
+    
+    console.log(`[API] assess_compliance completed, score: ${result.assessment?.overallScore}`);
+    res.json(result);
+    
+  } catch (error) {
+    console.error("assess_compliance error:", error);
+    res.status(500).json({ 
+      error: true, 
+      message: error instanceof Error ? error.message : "Unknown error" 
+    });
+  }
+});
+
 // Start server
 app.listen(PORT, () => {
   console.log(`\n🇪🇺 EU AI Act Compliance Agent Server`);
@@ -760,6 +935,11 @@ app.listen(PORT, () => {
   console.log(`✓ Health check: http://localhost:${PORT}/health`);
   console.log(`✓ Chat API: http://localhost:${PORT}/api/chat`);
   console.log(`✓ Tools API: http://localhost:${PORT}/api/tools`);
+  console.log(`\n📡 Direct Tool Endpoints (for ChatGPT Apps):`);
+  console.log(`  • POST /api/tools/discover_organization`);
+  console.log(`  • POST /api/tools/discover_ai_services`);
+  console.log(`  • POST /api/tools/assess_compliance`);
   console.log(`\n💡 Start Gradio UI: pnpm gradio`);
+  console.log(`💡 Start ChatGPT App: pnpm chatgpt-app`);
   console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
 });

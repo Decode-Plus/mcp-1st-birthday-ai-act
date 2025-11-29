@@ -2,15 +2,18 @@
  * Organization Discovery Tool
  * Implements EU AI Act Article 16 and Article 49 requirements
  * Uses Tavily AI-powered research to discover organization details and regulatory context
+ * Falls back to AI model when Tavily is not available
  */
 
 import { tavily } from "@tavily/core";
+import { generateText } from "ai";
 import type {
   OrganizationProfile,
   DiscoverOrganizationInput,
 } from "../types/index.js";
 import { getBrandingInfo } from "../utils/branding.js";
 import { findCompanyDomain } from "../utils/domain.js";
+import { getModel } from "../utils/model.js";
 
 /**
  * Known Enterprise Companies - Always classified as Enterprise regardless of content
@@ -555,6 +558,7 @@ function extractComprehensiveData(
 /**
  * Research organization using Tavily AI search
  * Performs comprehensive company research with a single advanced search
+ * Falls back to AI model when Tavily is not available
  */
 async function researchOrganization(
   name: string,
@@ -564,8 +568,9 @@ async function researchOrganization(
   const apiKey = process.env.TAVILY_API_KEY;
   
   if (!apiKey) {
-    console.warn("TAVILY_API_KEY not set, using fallback mock data");
-    return createFallbackProfile(name, domain);
+    console.warn("⚠️  TAVILY_API_KEY not set, using AI model for organization research");
+    // Use AI model fallback instead of mock data
+    return researchOrganizationWithAI(name, domain, context);
   }
   
   try {
@@ -677,7 +682,8 @@ async function researchOrganization(
     };
   } catch (error) {
     console.error("❌ Tavily research error:", error);
-    return createFallbackProfile(name, domain);
+    console.warn("⚠️  Falling back to AI model for organization research");
+    return researchOrganizationWithAI(name, domain, context);
   }
 }
 
@@ -705,25 +711,199 @@ function calculateCompletenessScore(
 }
 
 /**
- * Fallback profile when Tavily is not available
+ * Parse JSON response safely from AI model output
  */
-function createFallbackProfile(name: string, domain?: string): Partial<OrganizationProfile> {
+function parseJSONResponse<T>(content: string): T | null {
+  try {
+    // Try to extract JSON from markdown code blocks if present
+    const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+    const jsonStr = jsonMatch ? jsonMatch[1].trim() : content.trim();
+    return JSON.parse(jsonStr) as T;
+  } catch (error) {
+    console.error("Failed to parse JSON response:", error);
+    // Try to parse without code blocks
+    try {
+      // Remove any leading/trailing non-JSON content
+      const cleanedContent = content.replace(/^[^{]*/, '').replace(/[^}]*$/, '');
+      return JSON.parse(cleanedContent) as T;
+    } catch {
+      console.error("Secondary parse also failed");
+      return null;
+    }
+  }
+}
+
+/**
+ * Research organization using AI model (fallback when Tavily is not available)
+ * Uses the configured AI model to generate organization profile based on knowledge
+ */
+async function researchOrganizationWithAI(
+  name: string,
+  domain?: string,
+  context?: string
+): Promise<Partial<OrganizationProfile>> {
+  console.error("\n🤖 Using AI model fallback for organization research (Tavily not available)");
+  
   const now = new Date().toISOString();
+  const model = getModel(undefined, "discover_organization");
+  
+  // Check if it's a known enterprise company
+  const isEnterprise = isKnownEnterpriseCompany(name);
+  const knownDomain = domain || getKnownDomain(name);
+  
+  const prompt = `You are an expert business analyst. Research and provide information about the organization "${name}"${knownDomain ? ` (domain: ${knownDomain})` : ""}${context ? `. Additional context: ${context}` : ""}.
+
+Based on your knowledge, provide a comprehensive organization profile for EU AI Act compliance assessment.
+
+${isEnterprise ? `Note: ${name} is a known large enterprise company. Classify as "Enterprise" size.` : ""}
+
+RESPOND ONLY WITH VALID JSON in this exact format:
+{
+  "sector": "<Technology|Healthcare|Financial Services|Retail|Manufacturing|Education|Media & Entertainment|Energy|Telecommunications|Automotive|Other>",
+  "size": "<${isEnterprise ? 'Enterprise' : 'Startup|SME|Enterprise'}>",
+  "headquartersCountry": "<country name>",
+  "headquartersCity": "<city name>",
+  "euPresence": <true|false>,
+  "jurisdictions": ["<jurisdiction1>", "<jurisdiction2>"],
+  "aiMaturityLevel": "<Nascent|Developing|Mature|Leader>",
+  "certifications": ["<cert1>", "<cert2>"],
+  "hasQualityManagementSystem": <true|false>,
+  "hasRiskManagementSystem": <true|false>,
+  "description": "<brief description of the organization and its AI activities>"
+}
+
+Focus on providing accurate information based on your knowledge. If uncertain, make reasonable inferences based on the company name, industry, and any context provided.`;
+
+  try {
+    const result = await generateText({
+      model,
+      prompt,
+      temperature: 0.3,
+      providerOptions: {
+        anthropic: {
+          thinking: { type: "enabled", budgetTokens: 1000 },
+        },
+        openai: {
+          reasoningEffort: "low",
+        },
+        google: {
+          thinkingConfig: {
+            thinkingLevel: "low",
+            includeThoughts: true,
+          },
+        },
+      },
+    });
+
+    const responseText = result.text;
+    console.error(`[AI Fallback] Generated response (${responseText.length} chars)`);
+    
+    const parsedData = parseJSONResponse<{
+      sector: string;
+      size: string;
+      headquartersCountry: string;
+      headquartersCity: string;
+      euPresence: boolean;
+      jurisdictions: string[];
+      aiMaturityLevel: string;
+      certifications: string[];
+      hasQualityManagementSystem: boolean;
+      hasRiskManagementSystem: boolean;
+      description: string;
+    }>(responseText);
+    
+    if (!parsedData) {
+      console.error("❌ Failed to parse AI response, using basic fallback");
+      return createBasicFallbackProfile(name, domain);
+    }
+    
+    console.error(`✅ AI model provided organization profile for ${name}`);
+    console.error(`   Sector: ${parsedData.sector}`);
+    console.error(`   Size: ${parsedData.size}`);
+    console.error(`   HQ: ${parsedData.headquartersCity}, ${parsedData.headquartersCountry}`);
+    console.error(`   EU Presence: ${parsedData.euPresence}`);
+    
+    return {
+      organization: {
+        name,
+        sector: parsedData.sector || "Technology",
+        size: (parsedData.size as "Startup" | "SME" | "Enterprise") || "SME",
+        jurisdiction: parsedData.jurisdictions || ["Unknown"],
+        euPresence: parsedData.euPresence ?? false,
+        headquarters: {
+          country: parsedData.headquartersCountry || "Unknown",
+          city: parsedData.headquartersCity || "Unknown",
+        },
+        contact: {
+          email: knownDomain ? `contact@${knownDomain}` : "unknown@example.com",
+          website: knownDomain ? `https://${knownDomain}` : undefined,
+        },
+        aiMaturityLevel: (parsedData.aiMaturityLevel as "Nascent" | "Developing" | "Mature" | "Leader") || "Developing",
+        aiSystemsCount: 0,
+        primaryRole: "Provider",
+      },
+      regulatoryContext: {
+        applicableFrameworks: ["EU AI Act", "GDPR"],
+        complianceDeadlines: [
+          {
+            date: "2025-02-02",
+            description: "Prohibited AI practices ban (Article 5)",
+            article: "Article 5",
+          },
+          {
+            date: "2025-08-02",
+            description: "GPAI model obligations (Article 53)",
+            article: "Article 53",
+          },
+          {
+            date: "2027-08-02",
+            description: "Full AI Act enforcement for high-risk systems",
+            article: "Article 113",
+          },
+        ],
+        existingCertifications: parsedData.certifications || [],
+        hasQualityManagementSystem: parsedData.hasQualityManagementSystem ?? false,
+        hasRiskManagementSystem: parsedData.hasRiskManagementSystem ?? false,
+      },
+      metadata: {
+        createdAt: now,
+        lastUpdated: now,
+        completenessScore: 70, // AI-generated data is more complete than basic fallback
+        dataSource: "ai-model-research",
+        aiGeneratedProfile: {
+          description: parsedData.description,
+          modelUsed: process.env.AI_MODEL || "claude-4.5",
+        },
+      },
+    };
+  } catch (error) {
+    console.error("❌ AI model fallback failed:", error);
+    return createBasicFallbackProfile(name, domain);
+  }
+}
+
+/**
+ * Basic fallback profile when both Tavily and AI model fail
+ */
+function createBasicFallbackProfile(name: string, domain?: string): Partial<OrganizationProfile> {
+  const now = new Date().toISOString();
+  const isEnterprise = isKnownEnterpriseCompany(name);
+  const knownDomain = domain || getKnownDomain(name);
   
   return {
     organization: {
       name,
       sector: "Technology",
-      size: "SME",
-      jurisdiction: ["EU"],
-      euPresence: true,
+      size: isEnterprise ? "Enterprise" : "SME",
+      jurisdiction: ["Unknown"],
+      euPresence: false,
       headquarters: {
         country: "Unknown",
         city: "Unknown",
       },
       contact: {
-        email: domain ? `contact@${domain}` : "unknown@example.com",
-        website: domain ? `https://${domain}` : undefined,
+        email: knownDomain ? `contact@${knownDomain}` : "unknown@example.com",
+        website: knownDomain ? `https://${knownDomain}` : undefined,
       },
       aiMaturityLevel: "Developing",
       aiSystemsCount: 0,
@@ -755,10 +935,19 @@ function createFallbackProfile(name: string, domain?: string): Partial<Organizat
     metadata: {
       createdAt: now,
       lastUpdated: now,
-      completenessScore: 40,
-      dataSource: "fallback-mock",
+      completenessScore: 30,
+      dataSource: "basic-fallback",
     },
   };
+}
+
+/**
+ * Fallback profile when Tavily is not available
+ * @deprecated Use researchOrganizationWithAI instead
+ */
+function createFallbackProfile(name: string, domain?: string): Partial<OrganizationProfile> {
+  // Redirect to basic fallback - this is kept for backwards compatibility
+  return createBasicFallbackProfile(name, domain);
 }
 
 /**

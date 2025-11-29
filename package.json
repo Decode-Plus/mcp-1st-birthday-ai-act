@@ -5,7 +5,7 @@
   "engines": {
     "node": ">=18.18.2"
   },
-  "packageManager": "pnpm@8.10.5",
+  "packageManager": "pnpm@10.24.0",
   "scripts": {
     "build": "turbo build",
     "clean": "git clean -xdf node_modules",
@@ -26,7 +26,13 @@
   "pnpm": {
     "overrides": {
       "@auth/core": "0.18.0"
-    }
+    },
+    "onlyBuiltDependencies": [
+      "@biomejs/biome",
+      "core-js-pure",
+      "esbuild",
+      "sharp"
+    ]
   },
   "dependencies": {
     "dotenv": "^17.2.3"

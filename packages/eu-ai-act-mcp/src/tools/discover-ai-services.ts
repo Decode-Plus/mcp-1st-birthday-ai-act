@@ -12,9 +12,12 @@
  * - Article 50: Transparency Obligations
  * - Article 72: Post-Market Monitoring Requirements
  * - Article 17: Quality Management System
+ * 
+ * Falls back to AI model when Tavily is not available
  */
 
 import { tavily } from "@tavily/core";
+import { generateText } from "ai";
 import type {
   AISystemProfile,
   AISystemsDiscoveryResponse,
@@ -22,6 +25,33 @@ import type {
   OrganizationProfile,
   RiskCategory,
 } from "../types/index.js";
+import { getModel } from "../utils/model.js";
+
+/**
+ * Parse JSON response safely from AI model output
+ */
+function parseJSONResponse<T>(content: string): T | null {
+  try {
+    // Try to extract JSON from markdown code blocks if present
+    const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+    const jsonStr = jsonMatch ? jsonMatch[1].trim() : content.trim();
+    return JSON.parse(jsonStr) as T;
+  } catch (error) {
+    console.error("Failed to parse JSON response:", error);
+    // Try to parse without code blocks
+    try {
+      // Remove any leading/trailing non-JSON content
+      const cleanedContent = content.replace(/^[^{[]*/, '').replace(/[}\]]*[^}\]]*$/, (match) => {
+        // Keep valid JSON closing brackets
+        return match.match(/^[}\]]*/)?.[0] || '';
+      });
+      return JSON.parse(cleanedContent) as T;
+    } catch {
+      console.error("Secondary parse also failed");
+      return null;
+    }
+  }
+}
 
 /**
  * Extended AI service discovery with research-backed data
@@ -32,6 +62,8 @@ import type {
  * - Service mesh observability
  * - ML model registries
  * - Tavily API for continuous compliance monitoring
+ * 
+ * Falls back to AI model when Tavily is not available
  */
 async function scanForAISystems(
   orgContext?: OrganizationProfile,
@@ -41,8 +73,9 @@ async function scanForAISystems(
   const organizationName = orgContext?.organization?.name || "Example Corp";
   
   if (!apiKey) {
-    console.warn("⚠️  TAVILY_API_KEY not set, using fallback mock data");
-    return getMockSystems(orgContext);
+    console.warn("⚠️  TAVILY_API_KEY not set, using AI model for AI systems discovery");
+    // Use AI model fallback instead of mock data
+    return discoverAISystemsWithAI(orgContext, systemNames);
   }
 
   try {
@@ -89,8 +122,8 @@ async function scanForAISystems(
     );
     
     if (discoveredSystems.length === 0) {
-      console.warn("⚠️  No AI systems found in Tavily results, using fallback mock data");
-      return getMockSystems(orgContext);
+      console.warn("⚠️  No AI systems found in Tavily results, using AI model fallback");
+      return discoverAISystemsWithAI(orgContext, systemNames);
     }
     
     console.error(`\n✅ Discovered ${discoveredSystems.length} AI systems for ${organizationName}`);
@@ -98,8 +131,8 @@ async function scanForAISystems(
     
   } catch (error) {
     console.error("❌ Tavily research error:", error);
-    console.warn("⚠️  Falling back to mock data due to error");
-    return getMockSystems(orgContext);
+    console.warn("⚠️  Falling back to AI model for AI systems discovery");
+    return discoverAISystemsWithAI(orgContext, systemNames);
   }
 }
 
@@ -683,30 +716,170 @@ function buildComplianceStatus(category: RiskCategory): any {
 }
 
 /**
- * Get mock systems as fallback
+ * Discover AI systems using AI model (fallback when Tavily is not available)
+ * Uses the configured AI model to generate AI system profiles based on knowledge
  */
-function getMockSystems(orgContext?: OrganizationProfile): AISystemProfile[] {
+async function discoverAISystemsWithAI(
+  orgContext?: OrganizationProfile,
+  systemNames?: string[]
+): Promise<AISystemProfile[]> {
+  console.error("\n🤖 Using AI model fallback for AI systems discovery (Tavily not available)");
+  
+  const now = new Date().toISOString();
+  const organizationName = orgContext?.organization?.name || "Unknown Organization";
+  const model = getModel(undefined, "discover_ai_services");
+  
+  const systemNamesContext = systemNames && systemNames.length > 0
+    ? `Focus specifically on these systems: ${systemNames.join(", ")}`
+    : "Discover all known AI systems, products, and services";
+  
+  const prompt = `You are an expert AI systems analyst specializing in EU AI Act compliance. Analyze the organization "${organizationName}" and identify their AI systems.
+
+${systemNamesContext}
+
+Based on your knowledge, provide AI system profiles for EU AI Act compliance assessment.
+
+For each AI system, classify according to EU AI Act risk categories:
+- **Unacceptable**: Prohibited practices (social scoring, manipulation)
+- **High**: Per Annex III (recruitment, healthcare, credit scoring, biometric, legal/judicial, education, law enforcement, critical infrastructure)
+- **Limited**: Transparency obligations (chatbots, emotion recognition)
+- **Minimal**: No specific obligations
+
+RESPOND ONLY WITH VALID JSON array format:
+[
+  {
+    "name": "<system name>",
+    "description": "<brief description>",
+    "intendedPurpose": "<intended purpose and use cases>",
+    "riskCategory": "<Unacceptable|High|Limited|Minimal>",
+    "annexIIICategory": "<Annex III category if High risk, else 'N/A'>",
+    "justification": "<why this risk classification>",
+    "aiTechnology": ["<technology1>", "<technology2>"],
+    "dataProcessed": ["<data type1>", "<data type2>"]
+  }
+]
+
+Provide 1-5 AI systems based on what you know about ${organizationName}. If you don't have specific knowledge, infer based on their industry sector (${orgContext?.organization?.sector || "Technology"}).`;
+
+  try {
+    const result = await generateText({
+      model,
+      prompt,
+      temperature: 0.3,
+      providerOptions: {
+        anthropic: {
+          thinking: { type: "enabled", budgetTokens: 1000 },
+        },
+        openai: {
+          reasoningEffort: "low",
+        },
+        google: {
+          thinkingConfig: {
+            thinkingLevel: "low",
+            includeThoughts: true,
+          },
+        },
+      },
+    });
+
+    const responseText = result.text;
+    console.error(`[AI Fallback] Generated response (${responseText.length} chars)`);
+    
+    const parsedSystems = parseJSONResponse<Array<{
+      name: string;
+      description: string;
+      intendedPurpose: string;
+      riskCategory: string;
+      annexIIICategory: string;
+      justification: string;
+      aiTechnology: string[];
+      dataProcessed: string[];
+    }>>(responseText);
+    
+    if (!parsedSystems || parsedSystems.length === 0) {
+      console.error("❌ Failed to parse AI response, using basic fallback");
+      return getBasicMockSystems(orgContext);
+    }
+    
+    console.error(`✅ AI model discovered ${parsedSystems.length} AI systems for ${organizationName}`);
+    
+    // Convert parsed systems to AISystemProfile format
+    return parsedSystems.map((sys, index) => {
+      const riskCategory = (sys.riskCategory || "Minimal") as RiskCategory;
+      const riskClassification = buildRiskClassification(riskCategory, sys.name);
+      
+      // Update with AI-provided classification details
+      if (sys.annexIIICategory && sys.annexIIICategory !== "N/A") {
+        riskClassification.annexIIICategory = sys.annexIIICategory;
+      }
+      if (sys.justification) {
+        riskClassification.justification = sys.justification;
+      }
+      
+      const complianceStatus = buildComplianceStatus(riskCategory);
+      
+      console.error(`   - ${sys.name}: ${riskCategory} risk`);
+      
+      return {
+        system: {
+          name: sys.name,
+          systemId: `ai-discovered-${index + 1}`,
+          description: sys.description,
+          intendedPurpose: sys.intendedPurpose,
+          version: "1.0.0",
+          status: "Production",
+          provider: {
+            name: organizationName,
+            role: "Provider",
+            contact: orgContext?.organization?.contact?.email || "contact@example.com",
+          },
+        },
+        riskClassification,
+        technicalDetails: buildTechnicalDetails(sys.name),
+        complianceStatus,
+        metadata: {
+          createdAt: now,
+          lastUpdated: now,
+          dataSource: "ai-model-discovery",
+          discoveryMethod: "ai-model-fallback",
+          researchSources: [],
+          aiGeneratedProfile: {
+            modelUsed: process.env.AI_MODEL || "claude-4.5",
+          },
+        },
+      } as AISystemProfile;
+    });
+  } catch (error) {
+    console.error("❌ AI model fallback failed:", error);
+    return getBasicMockSystems(orgContext);
+  }
+}
+
+/**
+ * Basic mock systems as last resort fallback
+ */
+function getBasicMockSystems(orgContext?: OrganizationProfile): AISystemProfile[] {
   const now = new Date().toISOString();
   
   return [
     {
       system: {
-        name: "Example AI System",
-        systemId: "example-001",
-        description: "AI system discovered via mock data (Tavily not available)",
-        intendedPurpose: "This is example data. Configure TAVILY_API_KEY for real discovery.",
+        name: "AI System (Discovery Pending)",
+        systemId: "pending-001",
+        description: "AI system discovery in progress",
+        intendedPurpose: "Unable to discover specific AI systems. Please provide system names manually.",
         version: "1.0.0",
         status: "Production",
         provider: {
-          name: orgContext?.organization?.name || "Example Corp",
+          name: orgContext?.organization?.name || "Unknown Organization",
           role: "Provider",
           contact: orgContext?.organization?.contact?.email || "contact@example.com",
         },
       },
       riskClassification: {
         category: "Minimal",
-        annexIIICategory: "N/A - Mock Data",
-        justification: "Mock system - configure TAVILY_API_KEY for real AI systems discovery",
+        annexIIICategory: "N/A - Pending Discovery",
+        justification: "Risk classification pending - manual system specification recommended",
         safetyComponent: false,
         riskScore: 10,
         conformityAssessmentRequired: false,
@@ -715,14 +888,14 @@ function getMockSystems(orgContext?: OrganizationProfile): AISystemProfile[] {
       },
       technicalDetails: {
         aiTechnology: ["Machine Learning"],
-        dataProcessed: ["Example data"],
+        dataProcessed: ["Unknown"],
         processesSpecialCategoryData: false,
         deploymentModel: "Cloud",
-        vendor: "Example",
-        integrations: ["Example Systems"],
+        vendor: "Unknown",
+        integrations: [],
         humanOversight: {
-          enabled: false,
-          description: "Mock system - no oversight configured",
+          enabled: true,
+          description: "Human oversight status to be determined",
         },
       },
       complianceStatus: {
@@ -733,19 +906,28 @@ function getMockSystems(orgContext?: OrganizationProfile): AISystemProfile[] {
         registeredInEUDatabase: false,
         hasPostMarketMonitoring: false,
         hasAutomatedLogging: false,
-        identifiedGaps: ["CRITICAL: Configure TAVILY_API_KEY for real AI systems discovery"],
-        complianceDeadline: "N/A",
-        estimatedComplianceEffort: "N/A",
+        identifiedGaps: ["INFO: Specify AI system names for detailed discovery"],
+        complianceDeadline: "2027-08-02",
+        estimatedComplianceEffort: "To be determined",
       },
       metadata: {
         createdAt: now,
         lastUpdated: now,
-        dataSource: "mock-fallback",
+        dataSource: "basic-fallback",
         discoveryMethod: "fallback",
         researchSources: [],
       },
     },
   ];
+}
+
+/**
+ * Get mock systems as fallback
+ * @deprecated Use discoverAISystemsWithAI instead
+ */
+function getMockSystems(orgContext?: OrganizationProfile): AISystemProfile[] {
+  // Redirect to basic mock - this is kept for backwards compatibility
+  return getBasicMockSystems(orgContext);
 }
 
 /**

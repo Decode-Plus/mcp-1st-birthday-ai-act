@@ -167,7 +167,7 @@ export interface OrganizationProfile {
     /** Profile completeness score (0-100) */
     completenessScore: number;
     
-    /** Data source (manual entry, API discovery, tavily-research, etc.) */
+    /** Data source (manual entry, API discovery, tavily-research, ai-model-research, etc.) */
     dataSource: string;
     
     /** Tavily research results (when using Tavily for discovery) */
@@ -176,6 +176,12 @@ export interface OrganizationProfile {
       aiCapabilities: string;
       compliance: string;
       sources: string[];
+    };
+    
+    /** AI-generated profile data (when using AI model fallback for discovery) */
+    aiGeneratedProfile?: {
+      description?: string;
+      modelUsed: string;
     };
   };
 }
@@ -354,11 +360,16 @@ export interface AISystemProfile {
     /** Data source */
     dataSource: string;
     
-    /** Discovery method (automated scan, manual entry, API, etc.) */
+    /** Discovery method (automated scan, manual entry, API, ai-model-fallback, etc.) */
     discoveryMethod: string;
 
     /** Research sources (Tavily, documentation references) */
     researchSources?: string[];
+    
+    /** AI-generated profile data (when using AI model fallback for discovery) */
+    aiGeneratedProfile?: {
+      modelUsed: string;
+    };
   };
 }
 
@@ -579,6 +590,16 @@ export interface ComplianceDocumentation {
 }
 
 /**
+ * Supported AI Models for Compliance Assessment
+ */
+export type AIModelType = 
+  | "claude-4.5"    // Anthropic Claude Sonnet 4.5 (default)
+  | "claude-opus"   // Anthropic Claude Opus 4
+  | "gpt-5"         // OpenAI GPT-5
+  | "grok-4-1"      // xAI Grok 4.1 Fast Reasoning
+  | "gemini-3";     // Google Gemini 3 Pro
+
+/**
  * Compliance Assessment Input
  */
 export interface ComplianceAssessmentInput {
@@ -593,6 +614,9 @@ export interface ComplianceAssessmentInput {
   
   /** Whether to generate documentation templates (default: true) */
   generateDocumentation?: boolean;
+  
+  /** AI model to use for assessment (passed from UI settings) */
+  model?: AIModelType;
 }
 
 /**

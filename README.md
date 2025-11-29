@@ -241,19 +241,27 @@ Takes organization and service context to produce:
       "command": "npx",
       "args": ["@eu-ai-act/mcp-server"],
       "env": {
+        "MODAL_ENDPOINT_URL": "https://vasilis--gpt-oss-vllm-inference-serve.modal.run",
         "TAVILY_API_KEY": "tvly-YOUR_API_KEY",
-        "XAI_API_KEY": "xai-YOUR_KEY",
         "ANTHROPIC_API_KEY": "sk-ant-YOUR_KEY",
-        "OPENAI_API_KEY": "sk-YOUR_KEY"
+        "OPENAI_API_KEY": "sk-YOUR_KEY",
+        "XAI_API_KEY": "xai-YOUR_KEY",
+        "GOOGLE_GENERATIVE_AI_API_KEY": "AIza-YOUR_KEY"
       }
     }
   }
 }
 ```
 
+> 🆓 **Note:** 
+> - **GPT-OSS is the default model** and is **FREE** - only needs `MODAL_ENDPOINT_URL` (no API key!)
+> - Deploy your own: `cd modal && modal deploy gpt_oss_inference.py`
+> - You only need to provide credentials for the model you want to use
+> - Tavily API key is optional - enhances web research but AI model works as fallback
+
 ### 🔍 Tavily AI-Powered Company Research
 
-The MCP server now integrates with **[Tavily AI](https://tavily.com)** for intelligent, real-time company research during organization discovery. This enhancement transforms the `discover_organization` tool from mock data to **live web research**.
+The MCP server integrates with **[Tavily AI](https://tavily.com)** for intelligent, real-time company research during organization discovery. This enhancement transforms the `discover_organization` tool from mock data to **live web research**.
 
 #### Why Tavily?
 
@@ -309,7 +317,7 @@ An interactive AI agent that guides organizations through the entire compliance 
 ┌─────────────────────────────────────────────────────────┐
 │         Express API + Vercel AI SDK v5 Agent            │
 │   ┌─────────────────────────────────────────────────┐   │
-│   │  Grok 4.1 Reasoning with Streaming & Tool Calling         │   │
+│   │  Reasoning with Streaming & Tool Calling        │  │
 │   │  - Context management                           │   │
 │   │  - Multi-step workflows                         │   │
 │   │  - Intelligent tool orchestration               │   │
@@ -337,7 +345,21 @@ An interactive AI agent that guides organizations through the entire compliance 
 | **Real-time Assessment**     | Instant feedback on compliance status                |
 | **Document Generation**      | Auto-generated templates and reports                 |
 | **Export Options**           | Download compliance documentation                    |
-| **Model Selection**          | Choose between Claude 4-5, GPT-5, or Grok 4-1        |
+| **Multi-Model Support**      | Choose between 5 AI models (see below)               |
+| **Secure Key Storage**       | API keys stored in encrypted cookies (24h expiry)    |
+
+### 🤖 Supported AI Models
+
+| Model                 | Provider  | Description                            | Cost     | Default   |
+| --------------------- | --------- | -------------------------------------- | -------- | --------- |
+| 🆓 **GPT-OSS 20B**     | Modal.com | **FREE** reasoning model via Modal.com | **FREE** | ✅ **YES** |
+| **Claude 4.5 Sonnet** | Anthropic | Excellent reasoning                    | Paid     | No        |
+| **Claude Opus 4**     | Anthropic | Most powerful Claude model             | Paid     | No        |
+| **GPT-5**             | OpenAI    | OpenAI's most advanced model           | Paid     | No        |
+| **Grok 4.1**          | xAI       | Fast reasoning model                   | Paid     | No        |
+| **Gemini 3 Pro**      | Google    | Advanced reasoning with thinking       | Paid     | No        |
+
+> 🆓 **FREE by Default!** GPT-OSS 20B is the **default model** and requires **no API key** - just a Modal endpoint URL. The agent automatically uses GPT-OSS unless you select a different model. See [modal/README.md](modal/README.md) for deployment instructions.
 
 ### 🛠️ Tech Stack
 
@@ -345,9 +367,17 @@ An interactive AI agent that guides organizations through the entire compliance 
 - **[Gradio](https://gradio.app/)** — Interactive web UI with chat interface
 - **[Express](https://expressjs.com/)** — REST API server
 - **[MCP](https://modelcontextprotocol.io/)** — Tool integration protocol
-- **AI Models** — Choose from Claude 4-5 (Anthropic), GPT-5 (OpenAI), or Grok 4-1 (xAI) for intelligent responses
+- **[Modal.com](https://modal.com/)** — FREE LLM hosting for GPT-OSS
+- **AI Models** — Choose from 6 models:
+  - 🆓 GPT-OSS 20B (Modal.com) — **FREE default!**
+  - Claude 4.5 Sonnet & Claude Opus 4 (Anthropic)
+  - GPT-5 (OpenAI)
+  - Grok 4.1 (xAI)
+  - Gemini 3 Pro (Google)
 
 ### 🚀 Quick Start
+
+**🆓 Start with FREE GPT-OSS (Default Model):**
 
 ```bash
 # Install dependencies
@@ -355,19 +385,40 @@ pnpm install
 cd apps/eu-ai-act-agent
 pip3 install -r requirements.txt
 
-# Set API keys (required)
-export TAVILY_API_KEY="tvly-your-tavily-key"  # Required - Get from https://app.tavily.com
-# Choose one model and set its API key:
-export XAI_API_KEY="xai-your-key"              # For Grok 4-1
-# OR
-export ANTHROPIC_API_KEY="sk-ant-your-key"     # For Claude 4-5
-# OR
-export OPENAI_API_KEY="sk-your-key"             # For GPT-5
+# Deploy FREE GPT-OSS model on Modal.com (one-time setup)
+cd ../../modal
+pip install modal
+modal setup  # Follow prompts to create account (first $30/month FREE)
+modal deploy gpt_oss_inference.py
+# Copy the endpoint URL (e.g., https://your-workspace--gpt-oss-vllm-inference-serve.modal.run)
+
+# Set Modal endpoint (or paste in Gradio UI)
+export MODAL_ENDPOINT_URL="https://your-workspace--gpt-oss-vllm-inference-serve.modal.run"
+
+# Optional: Enhanced web research (not required - AI model works as fallback)
+export TAVILY_API_KEY="tvly-your-tavily-key"  # Get from https://app.tavily.com
 
 # Start everything
+cd ../apps/eu-ai-act-agent
 ./start.sh
-# Opens at http://localhost:7860
+# Opens at http://localhost:7860 - GPT-OSS is already selected as default!
 ```
+
+**💳 Or use a paid model (optional):**
+
+```bash
+# Set one of these instead of MODAL_ENDPOINT_URL:
+# export ANTHROPIC_API_KEY="sk-ant-your-key"     # For Claude 4.5 or Claude Opus
+# export OPENAI_API_KEY="sk-your-key"            # For GPT-5
+# export XAI_API_KEY="xai-your-key"              # For Grok 4.1
+# export GOOGLE_GENERATIVE_AI_API_KEY="AIza..."  # For Gemini 3 Pro
+```
+
+> 💡 **Tip:** 
+> - **GPT-OSS is FREE and the default** - no API key needed, just the Modal endpoint URL
+> - API keys and Modal endpoint can also be entered directly in the Gradio UI
+> - Settings are securely stored in encrypted browser cookies and auto-expire after 24 hours
+> - Modal.com offers **$30/month free credit** - perfect for trying out GPT-OSS!
 
 See [apps/eu-ai-act-agent/QUICKSTART.md](apps/eu-ai-act-agent/QUICKSTART.md) for detailed instructions.
 
@@ -380,12 +431,38 @@ See [apps/eu-ai-act-agent/QUICKSTART.md](apps/eu-ai-act-agent/QUICKSTART.md) for
 - Node.js 18+
 - pnpm 8+
 - Python 3.9+ with uv (fast package manager)
-- **Tavily API key** (required) - Get your free API key from [app.tavily.com](https://app.tavily.com)
+- **Tavily API key** (optional) - Get your free API key from [app.tavily.com](https://app.tavily.com) for enhanced web research
 - **Model selection** - Choose one of the following models:
-  - **Claude 4-5** (Anthropic) - API key required
-  - **GPT-5** (OpenAI) - API key required
-  - **Grok 4-1** (xAI) - API key required
-- **API key for your selected model** - Provide the corresponding API key based on your model choice
+  - 🆓 **GPT-OSS 20B** (Modal.com) - **FREE!** ✅ **DEFAULT MODEL** - Only needs `MODAL_ENDPOINT_URL`
+  - **Claude 4.5 Sonnet** (Anthropic) - `ANTHROPIC_API_KEY` required
+  - **Claude Opus 4** (Anthropic) - `ANTHROPIC_API_KEY` required
+  - **GPT-5** (OpenAI) - `OPENAI_API_KEY` required
+  - **Grok 4.1** (xAI) - `XAI_API_KEY` required
+  - **Gemini 3 Pro** (Google) - `GOOGLE_GENERATIVE_AI_API_KEY` required
+
+#### 🆓 Free Default Model: GPT-OSS via Modal.com
+
+**GPT-OSS 20B is the default model** - no API key required! The agent automatically uses GPT-OSS unless you select a different model in the UI.
+
+**Quick Setup (5 minutes):**
+
+1. **Create a free account** at [modal.com](https://modal.com) (first **$30/month FREE**)
+2. **Deploy the model:**
+   ```bash
+   cd modal
+   pip install modal
+   modal setup  # Follow prompts
+   modal deploy gpt_oss_inference.py
+   ```
+3. **Copy the endpoint URL** (e.g., `https://your-workspace--gpt-oss-vllm-inference-serve.modal.run`)
+4. **Set environment variable** or paste in Gradio UI:
+   ```bash
+   export MODAL_ENDPOINT_URL="https://your-workspace--gpt-oss-vllm-inference-serve.modal.run"
+   ```
+
+**That's it!** The agent will use GPT-OSS by default. No API keys needed! 🎉
+
+See [modal/README.md](modal/README.md) for detailed deployment instructions and GPU options.
 
 ### Installation
 
@@ -407,11 +484,13 @@ cd ../..
 # Set up environment variables
 cp .env.example .env
 # Edit .env and add:
-# - TAVILY_API_KEY (required) - Get from https://app.tavily.com
-# - Model API key (choose one):
-#   * ANTHROPIC_API_KEY (for Claude 4-5)
+# - MODAL_ENDPOINT_URL (for FREE GPT-OSS) - Deploy via: cd modal && modal deploy gpt_oss_inference.py
+# - OR Model API key (choose one based on your model):
+#   * ANTHROPIC_API_KEY (for Claude 4.5 or Claude Opus)
 #   * OPENAI_API_KEY (for GPT-5)
-#   * XAI_API_KEY (for Grok 4-1)
+#   * XAI_API_KEY (for Grok 4.1)
+#   * GOOGLE_GENERATIVE_AI_API_KEY (for Gemini 3 Pro)
+# - TAVILY_API_KEY (optional) - Get from https://app.tavily.com for enhanced web research
 
 # Build the MCP server
 pnpm --filter @eu-ai-act/mcp-server build

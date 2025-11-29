@@ -2,19 +2,22 @@
  * Compliance Assessment Tool
  * Implements EU AI Act compliance analysis using AI-powered assessment
  * 
- * Uses Anthropic Claude 4.5, OpenAI GPT-5, or xAI Grok 4 via Vercel AI SDK to analyze:
+ * Uses Anthropic Claude, OpenAI GPT-5, xAI Grok 4, Google Gemini, or GPT-OSS via Vercel AI SDK to analyze:
  * - Gap analysis against AI Act requirements
  * - Risk-specific compliance checklists
  * - Draft documentation templates
  * - Remediation recommendations
  * 
  * Environment Variable:
- * - AI_MODEL: "claude-4.5" | "gpt-5" | "grok-4-1" (default: "claude-4.5")
+ * - AI_MODEL: "gpt-oss" | "claude-4.5" | "claude-opus" | "gpt-5" | "grok-4-1" | "gemini-3" (default: "gpt-oss")
  * 
  * Supported Models:
- * - claude-4.5: Anthropic Claude Sonnet 4.5 (requires ANTHROPIC_API_KEY) - DEFAULT
+ * - gpt-oss: OpenAI GPT-OSS 20B via Modal.com (FREE - requires MODAL_ENDPOINT_URL) - DEFAULT
+ * - claude-4.5: Anthropic Claude Sonnet 4.5 (requires ANTHROPIC_API_KEY)
+ * - claude-opus: Anthropic Claude Opus 4 (requires ANTHROPIC_API_KEY)
  * - gpt-5: OpenAI GPT-5 (requires OPENAI_API_KEY)
  * - grok-4-1: xAI Grok 4.1 Fast Reasoning (requires XAI_API_KEY)
+ * - gemini-3: Google Gemini 3 Pro (requires GOOGLE_GENERATIVE_AI_API_KEY)
  * 
  * Research Integration:
  * - EU AI Act Regulation (EU) 2024/1689
@@ -26,9 +29,6 @@
  * - Annex IV (Technical Documentation)
  */
 
-import { xai } from "@ai-sdk/xai";
-import { openai } from "@ai-sdk/openai";
-import { anthropic } from "@ai-sdk/anthropic";
 import { streamText } from "ai";
 import { writeFile, mkdir } from "fs/promises";
 import { join, dirname } from "path";
@@ -42,42 +42,10 @@ import type {
   Recommendation,
   ComplianceDocumentation,
 } from "../types/index.js";
+import { getModel } from "../utils/model.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-
-/**
- * Get the AI model based on AI_MODEL environment variable
- * Supports: "gpt-5" (OpenAI), "grok-4-1" (xAI), or "claude-4.5" (Anthropic)
- */
-function getModel() {
-  const modelEnv = process.env.AI_MODEL || "claude-4.5";  // Default to Anthropic (hackathon host!)
-  
-  console.error(`[assess_compliance] Using AI model: ${modelEnv}`);
-  
-  if (modelEnv === "gpt-5") {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      throw new Error("OPENAI_API_KEY environment variable is required when using gpt-5");
-    }
-    return openai("gpt-5");
-  }
-  
-  if (modelEnv === "claude-4.5") {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      throw new Error("ANTHROPIC_API_KEY environment variable is required when using claude-4.5");
-    }
-    return anthropic("claude-sonnet-4-5-20250514");
-  }
-  
-  // Default to Grok-4-1
-  const apiKey = process.env.XAI_API_KEY;
-  if (!apiKey) {
-    throw new Error("XAI_API_KEY environment variable is required when using grok-4-1");
-  }
-  return xai("grok-4-1-fast-reasoning");
-}
 
 /**
  * EU AI Act Knowledge Base for AI context
@@ -564,7 +532,7 @@ function calculateOverallScore(
 export async function assessCompliance(
   input: ComplianceAssessmentInput
 ): Promise<ComplianceAssessmentResponse> {
-  let { organizationContext, aiServicesContext, focusAreas, generateDocumentation = true } = input;
+  let { organizationContext, aiServicesContext, focusAreas, generateDocumentation = true, model: modelParam } = input;
   
   // Normalize organizationContext - handle both full and simplified formats
   if (organizationContext && !organizationContext.organization) {
@@ -714,7 +682,7 @@ export async function assessCompliance(
   }
   console.error("-".repeat(60));
   
-  const model = getModel();
+  const model = getModel(modelParam, "assess_compliance");
   const now = new Date().toISOString();
   
   // Step 1: Generate compliance assessment using Grok 4
@@ -739,6 +707,12 @@ export async function assessCompliance(
       },
       openai: {
         reasoningEffort: "low",  // Low reasoning effort for GPT - much faster
+      },
+      google: {
+        thinkingConfig: {
+          thinkingLevel: "low",  // Low thinking for faster responses
+          includeThoughts: true,
+        },
       },
     },
   });
@@ -820,6 +794,12 @@ export async function assessCompliance(
         openai: {
           reasoningEffort: "low",  // Low reasoning effort for GPT - much faster
         },
+        google: {
+          thinkingConfig: {
+            thinkingLevel: "low",  // Low thinking for faster responses
+            includeThoughts: true,
+          },
+        },
       },
     });
     
@@ -876,11 +856,15 @@ export async function assessCompliance(
   }
   
   // Determine which model was used for metadata
-  const modelEnv = process.env.AI_MODEL || "grok-4-1";
+  const modelEnv = modelParam || process.env.AI_MODEL || "claude-4.5";
   const modelUsed = modelEnv === "gpt-5" 
     ? "openai-gpt-5" 
     : modelEnv === "claude-4.5"
     ? "anthropic-claude-sonnet-4-5"
+    : modelEnv === "claude-opus"
+    ? "anthropic-claude-opus-4-5"
+    : modelEnv === "gemini-3"
+    ? "google-gemini-3-pro"
     : "xai-grok-4-1-fast-reasoning";
   
   // Build response

@@ -11,7 +11,12 @@ A Model Context Protocol (MCP) server providing organization discovery and AI sy
 - ⚖️ **Compliance Analysis** - Gap analysis with specific Article references from the AI Act
 - 📊 **Risk Classification** - Automated risk categorization (Unacceptable, High, Limited, Minimal)
 - 📝 **Documentation Status** - Track technical documentation and conformity assessment requirements
-- 🧠 **AI-Powered Assessment** - Grok 4.1 reasoning powered compliance assessment with documentation generation
+- 🧠 **Multi-Model AI Assessment** - 5 AI models supported for compliance assessment:
+  - Claude 4.5 Sonnet & Claude Opus 4 (Anthropic)
+  - GPT-5 (OpenAI)
+  - Grok 4.1 (xAI)
+  - Gemini 3 Pro (Google)
+- 🔄 **Dynamic Model Selection** - Pass model as parameter to `assess_compliance` tool
 
 ## Installation
 
@@ -57,23 +62,27 @@ This MCP server uses **Tavily AI** for intelligent company research and organiza
    TAVILY_API_KEY=tvly-YOUR_API_KEY
    
    # Required: Choose one model and provide its API key
-   # For Claude 4-5:
+   # For Claude 4.5 or Claude Opus:
    ANTHROPIC_API_KEY=sk-ant-YOUR_KEY
    # OR for GPT-5:
    OPENAI_API_KEY=sk-YOUR_KEY
-   # OR for Grok 4-1:
+   # OR for Grok 4.1:
    XAI_API_KEY=xai-YOUR_KEY
+   # OR for Gemini 3 Pro:
+   GOOGLE_GENERATIVE_AI_API_KEY=AIza-YOUR_KEY
    ```
 
    Or set as environment variables:
    ```bash
    export TAVILY_API_KEY=tvly-YOUR_API_KEY
    # Choose one model:
-   export ANTHROPIC_API_KEY=sk-ant-YOUR_KEY  # For Claude 4-5
+   export ANTHROPIC_API_KEY=sk-ant-YOUR_KEY         # For Claude 4.5 or Claude Opus
    # OR
-   export OPENAI_API_KEY=sk-YOUR_KEY         # For GPT-5
+   export OPENAI_API_KEY=sk-YOUR_KEY                # For GPT-5
    # OR
-   export XAI_API_KEY=xai-YOUR_KEY           # For Grok 4-1
+   export XAI_API_KEY=xai-YOUR_KEY                  # For Grok 4.1
+   # OR
+   export GOOGLE_GENERATIVE_AI_API_KEY=AIza...      # For Gemini 3 Pro
    ```
 
 3. **For Claude Desktop**, add the environment variables to your config:
@@ -88,14 +97,15 @@ This MCP server uses **Tavily AI** for intelligent company research and organiza
            "TAVILY_API_KEY": "tvly-YOUR_API_KEY",
            "ANTHROPIC_API_KEY": "sk-ant-YOUR_KEY",
            "OPENAI_API_KEY": "sk-YOUR_KEY",
-           "XAI_API_KEY": "xai-YOUR_KEY"
+           "XAI_API_KEY": "xai-YOUR_KEY",
+           "GOOGLE_GENERATIVE_AI_API_KEY": "AIza-YOUR_KEY"
          }
        }
      }
    }
    ```
    
-   **Note**: You only need to set the API key for the model you want to use (Claude 4-5, GPT-5, or Grok 4-1).
+   **Note**: You only need to set the API key for the model you want to use (Claude 4.5, Claude Opus, GPT-5, Grok 4.1, or Gemini 3 Pro).
 
 ### How Tavily Enhances Organization Discovery
 
@@ -369,7 +379,16 @@ Discovers and classifies AI systems within an organization according to EU AI Ac
 
 ### 3. `assess_compliance`
 
-AI-powered compliance assessment and documentation generator using Claude 4-5, GPT-5, or Grok 4-1 (user selectable).
+AI-powered compliance assessment and documentation generator using one of 5 supported models.
+
+**Supported Models:**
+| Model ID      | Provider  | Model Name                  |
+| ------------- | --------- | --------------------------- |
+| `claude-4.5`  | Anthropic | Claude Sonnet 4.5 (default) |
+| `claude-opus` | Anthropic | Claude Opus 4               |
+| `gpt-5`       | OpenAI    | GPT-5                       |
+| `grok-4-1`    | xAI       | Grok 4.1 Fast Reasoning     |
+| `gemini-3`    | Google    | Gemini 3 Pro                |
 
 **Input:**
 ```json
@@ -377,9 +396,12 @@ AI-powered compliance assessment and documentation generator using Claude 4-5, G
   "organizationContext": { /* from discover_organization */ },
   "aiServicesContext": { /* from discover_ai_services */ },
   "focusAreas": ["Technical Documentation", "Risk Management"],
-  "generateDocumentation": true
+  "generateDocumentation": true,
+  "model": "claude-4.5"  // Optional: override AI_MODEL env var
 }
 ```
+
+> **New:** The `model` parameter allows direct model selection per request, taking precedence over the `AI_MODEL` environment variable.
 
 **Output Schema:**
 ```typescript
@@ -464,11 +486,16 @@ AI-powered compliance assessment and documentation generator using Claude 4-5, G
 - Annex IV (Technical Documentation Requirements)
 
 **Requirements:**
-- `TAVILY_API_KEY` environment variable must be set (required)
-- One of the following model API keys must be set:
-  - `ANTHROPIC_API_KEY` for Claude 4-5
+- `TAVILY_API_KEY` environment variable must be set (required for web research)
+- One of the following model API keys must be set (based on model selection):
+  - `ANTHROPIC_API_KEY` for Claude 4.5 or Claude Opus
   - `OPENAI_API_KEY` for GPT-5
-  - `XAI_API_KEY` for Grok 4-1
+  - `XAI_API_KEY` for Grok 4.1
+  - `GOOGLE_GENERATIVE_AI_API_KEY` for Gemini 3 Pro
+- Model can be selected via:
+  - `model` parameter in tool input (takes precedence)
+  - `AI_MODEL` environment variable
+  - Defaults to `claude-4.5` if not specified
 - Uses the selected model for intelligent compliance analysis
 - Generates professional documentation templates in Markdown
 
@@ -486,9 +513,13 @@ The test agent will:
 2. List available tools
 3. Test organization discovery
 4. Test AI services discovery
-5. Test AI-powered compliance assessment (requires `TAVILY_API_KEY` and one model API key: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `XAI_API_KEY`)
+5. Test AI-powered compliance assessment (requires `TAVILY_API_KEY` and one model API key)
 6. Display compliance gaps and recommendations
 7. Show generated documentation templates
+
+**Required API keys for testing:**
+- `TAVILY_API_KEY` (always required)
+- One of: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `XAI_API_KEY`, or `GOOGLE_GENERATIVE_AI_API_KEY`
 
 ## ChatGPT App Deployment
 
@@ -560,8 +591,8 @@ app.listen(3000, () => {
          │  └─────────────────────┘    │
          │                             │
          │  ┌─────────────────────┐    │
-         │  │  assess_            │◄──┼──── AI Model (Claude 4-5 / GPT-5 / Grok 4-1)
-         │  │  compliance         │    │
+         │  │  assess_            │◄──┼──── AI Model (5 models supported)
+         │  │  compliance         │    │     Claude 4.5/Opus | GPT-5 | Grok 4.1 | Gemini 3
          │  └─────────────────────┘    │
          └─────────────────────────────┘
 ```
@@ -582,7 +613,7 @@ packages/eu-ai-act-mcp/
 │   └── tools/
 │       ├── discover-organization.ts   # Tavily-powered org discovery
 │       ├── discover-ai-services.ts    # AI systems inventory
-│       └── assess-compliance.ts       # Grok 4.1 reasoning compliance assessment
+│       └── assess-compliance.ts       # Multi-model AI compliance assessment
 ├── package.json
 ├── tsconfig.json
 └── README.md
@@ -628,8 +659,14 @@ Contributions are welcome! This is a hackathon project for the MCP 1st Birthday 
 - [EU AI Act Official Text](https://eur-lex.europa.eu/eli/reg/2024/1689/oj)
 - [AI Act Explorer](https://artificialintelligenceact.eu/)
 - [Model Context Protocol](https://modelcontextprotocol.io/)
-- [xAI API Documentation](https://docs.x.ai/)
+- [Vercel AI SDK](https://ai-sdk.dev/)
 - [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk)
+
+### AI Provider Documentation
+- [Anthropic API](https://docs.anthropic.com/)
+- [OpenAI API](https://platform.openai.com/docs)
+- [xAI API](https://docs.x.ai/)
+- [Google AI](https://ai.google.dev/docs)
 
 ---
 

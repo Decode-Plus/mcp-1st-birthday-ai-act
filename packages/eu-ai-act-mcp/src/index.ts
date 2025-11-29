@@ -34,6 +34,12 @@ import {
   ComplianceAssessmentInputSchema,
 } from "./schemas/index.js";
 
+// Export shared utilities for external use
+export { getModel } from "./utils/model.js";
+
+// Export tool functions for direct API use (ChatGPT Apps, REST API, etc.)
+export { discoverOrganization, discoverAIServices, assessCompliance };
+
 /**
  * MCP Server Instance
  */
@@ -197,7 +203,14 @@ This tool takes organization and AI services context to produce comprehensive co
 - Overall compliance score (0-100)
 - Chain-of-thought reasoning explanation
 
-Uses xAI Grok-4 to analyze compliance status and generate professional documentation templates for:
+Supports multiple AI models (set via 'model' parameter or AI_MODEL environment variable):
+- claude-4.5: Anthropic Claude Sonnet 4.5 (default)
+- claude-opus: Anthropic Claude Opus 4
+- gpt-5: OpenAI GPT-5
+- grok-4-1: xAI Grok 4.1 Fast Reasoning
+- gemini-3: Google Gemini 3 Pro
+
+Generates professional documentation templates for:
 - Risk Management System (Article 9)
 - Technical Documentation (Article 11, Annex IV)
 - Conformity Assessment (Article 43)
@@ -206,22 +219,24 @@ Uses xAI Grok-4 to analyze compliance status and generate professional documenta
 - Human Oversight Procedure (Article 14)
 - Data Governance Policy (Article 10)
 
-Requires XAI_API_KEY environment variable to be set.`,
+Requires appropriate API key environment variable based on selected model.`,
     inputSchema: z.object({
       organizationContext: z.any().optional().nullable().describe("Organization profile from discover_organization tool (optional)"),
       aiServicesContext: z.any().optional().nullable().describe("AI services discovery results from discover_ai_services tool (optional)"),
       focusAreas: z.array(z.string()).optional().nullable().describe("Specific compliance areas to focus on (optional)"),
       generateDocumentation: z.boolean().optional().nullable().describe("Whether to generate documentation templates (default: true)"),
+      model: z.enum(["claude-4.5", "claude-opus", "gpt-5", "grok-4-1", "gemini-3"]).optional().nullable().describe("AI model to use: claude-4.5 (default), claude-opus, gpt-5, grok-4-1, gemini-3"),
     }),
   },
-  async ({ organizationContext, aiServicesContext, focusAreas, generateDocumentation }: { organizationContext?: any; aiServicesContext?: any; focusAreas?: string[] | null; generateDocumentation?: boolean | null }) => {
+  async ({ organizationContext, aiServicesContext, focusAreas, generateDocumentation, model }: { organizationContext?: any; aiServicesContext?: any; focusAreas?: string[] | null; generateDocumentation?: boolean | null; model?: string | null }) => {
     // Convert null values to undefined for downstream functions
     const cleanFocusAreas = focusAreas ?? undefined;
     const cleanGenerateDocumentation = generateDocumentation ?? undefined;
     const cleanOrgContext = organizationContext ?? undefined;
     const cleanAiServicesContext = aiServicesContext ?? undefined;
+    const cleanModel = model ?? undefined;
     
-    console.error(`[assess_compliance] Called with: focusAreas=${JSON.stringify(cleanFocusAreas)}, generateDocumentation=${cleanGenerateDocumentation}`);
+    console.error(`[assess_compliance] Called with: model="${cleanModel}", focusAreas=${JSON.stringify(cleanFocusAreas)}, generateDocumentation=${cleanGenerateDocumentation}`);
     
     try {
     // Execute tool
@@ -230,6 +245,7 @@ Requires XAI_API_KEY environment variable to be set.`,
       aiServicesContext: cleanAiServicesContext,
       focusAreas: cleanFocusAreas,
       generateDocumentation: cleanGenerateDocumentation,
+      model: cleanModel as any,
     });
     
     console.error(`[assess_compliance] Completed, score: ${result.assessment?.overallScore || 'N/A'}`);

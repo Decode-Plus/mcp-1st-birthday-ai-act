@@ -8,12 +8,33 @@ pinned: true
 tags:
   - building-mcp-track-enterprise
   - mcp-in-action-track-enterprise
+  - modal-infernce
+  - gemini
+  - claude
+  - gpt-apps
+  - gpt-oss
 short_description: AI-powered EU AI Act compliance assessment with MCP tools
 ---
 
 # 🇪🇺 EU AI Act Compliance Agent
 
-An interactive AI agent with Gradio UI for navigating EU AI Act compliance requirements, powered by Vercel AI SDK v5 and the EU AI Act MCP Server.
+> **🎂 Built for the MCP 1st Birthday Hackathon**  
+> **🔗 [Live Demo & Showcase](https://www.legitima.ai/mcp-hackathon)** - See MCP tools and agent capabilities in action!
+
+An interactive AI agent with Gradio UI for navigating EU AI Act compliance requirements, powered by Vercel AI SDK v5 and the EU AI Act MCP Server. This project demonstrates enterprise-grade MCP tool integration with multi-model AI capabilities for regulatory compliance assessment.
+
+## 🎯 Hackathon Submission
+
+**Track 1: Building MCP** ✅ | **Track 2: MCP in Action** ✅
+
+This submission showcases:
+- **Custom MCP Server** with 3 specialized tools for EU AI Act compliance
+- **Enterprise-grade Agent** using Vercel AI SDK v5 with intelligent tool orchestration
+- **Multi-model Support** - 6 AI models including free GPT-OSS via Modal.com
+- **Real-world Application** - Solving critical regulatory compliance challenges
+- **Production-ready Architecture** - Gradio UI + Express API + MCP Protocol
+
+**🔗 Demo & Showcase:** [www.legitima.ai/mcp-hackathon](https://www.legitima.ai/mcp-hackathon)
 
 ## 🏗️ Architecture
 
@@ -21,6 +42,7 @@ An interactive AI agent with Gradio UI for navigating EU AI Act compliance requi
 ┌─────────────────────────────────────────────────────────┐
 │                    Gradio Web UI                        │
 │         (Python - Interactive Chat Interface)           │
+│              Real-time streaming responses              │
 └────────────────────┬────────────────────────────────────┘
                      │ HTTP/REST
                      ▼
@@ -28,37 +50,92 @@ An interactive AI agent with Gradio UI for navigating EU AI Act compliance requi
 │              Express API Server                         │
 │         (Node.js + Vercel AI SDK v5)                    │
 │   ┌─────────────────────────────────────────────────┐   │
-│   │  AI Agent with Tool Calling                     │   │
-│   │  - Grok 4.1 Reasoning Models                               │   │
+│   │  AI Agent with Intelligent Tool Orchestration    │   │
+│   │  - Multi-model support (6 models)                │   │
 │   │  - Streaming responses                          │   │
 │   │  - Contextual awareness                         │   │
+│   │  - Automatic tool selection                     │   │
 │   └─────────────────────────────────────────────────┘   │
 └────────────────────┬────────────────────────────────────┘
-                     │
+                     │ MCP Protocol
                      ▼
 ┌─────────────────────────────────────────────────────────┐
-│              EU AI Act MCP Tools                        │
-│   ┌──────────────┐  ┌──────────────┐  ┌─────────────┐  │
-│   │  discover_   │  │  discover_   │  │   assess_   │  │
-│   │organization  │  │ ai_services  │  │ compliance  │  │
-│   └──────────────┘  └──────────────┘  └─────────────┘  │
+│         EU AI Act MCP Server (@eu-ai-act/mcp)          │
+│   ┌─────────────────────────────────────────────────┐  │
+│   │  Tool 1: discover_organization                   │  │
+│   │  • Tavily-powered web research                   │  │
+│   │  • Company profiling & AI maturity              │  │
+│   │  • Regulatory context discovery                 │  │
+│   └─────────────────────────────────────────────────┘  │
+│   ┌─────────────────────────────────────────────────┐  │
+│   │  Tool 2: discover_ai_services                    │  │
+│   │  • AI systems inventory                         │  │
+│   │  • Risk classification (4 tiers)                 │  │
+│   │  • Compliance status tracking                   │  │
+│   └─────────────────────────────────────────────────┘  │
+│   ┌─────────────────────────────────────────────────┐  │
+│   │  Tool 3: assess_compliance                      │  │
+│   │  • AI-powered gap analysis                      │  │
+│   │  • Multi-model assessment (5 models)            │  │
+│   │  • Documentation generation                     │  │
+│   └─────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────┘
 ```
+
+### 🔌 MCP Tools Integration
+
+This agent leverages a **custom MCP server** (`@eu-ai-act/mcp-server`) that provides three specialized tools for EU AI Act compliance:
+
+#### 1. `discover_organization` 🏢
+- **Purpose**: Discover and profile organizations for compliance assessment
+- **Features**:
+  - Tavily AI-powered web research for real company data
+  - AI maturity level assessment (Nascent → Expert)
+  - Regulatory context discovery (GDPR, ISO certifications)
+  - EU presence and jurisdiction analysis
+  - Compliance deadline tracking
+- **EU AI Act References**: Articles 16, 17, 22, 49
+
+#### 2. `discover_ai_services` 🤖
+- **Purpose**: Inventory and classify AI systems according to EU AI Act risk tiers
+- **Features**:
+  - Automated risk classification (Unacceptable/High/Limited/Minimal)
+  - Annex III category identification
+  - Conformity assessment requirements
+  - Technical documentation status tracking
+  - Post-market monitoring compliance
+- **EU AI Act References**: Articles 6, 9, 10, 11, 12, 14, 43, 47, 48, 49, 72
+
+#### 3. `assess_compliance` ⚖️
+- **Purpose**: AI-powered compliance assessment with gap analysis and documentation generation
+- **Features**:
+  - Multi-model AI assessment (Claude 4.5, Claude Opus, GPT-5, Grok 4.1, Gemini 3 Pro)
+  - Comprehensive gap analysis with Article references
+  - Priority-based recommendations
+  - Auto-generated documentation templates:
+    - Risk Management System (Article 9)
+    - Technical Documentation (Article 11 / Annex IV)
+- **EU AI Act References**: Articles 9-17, 43, 49, 50, Annex IV
+
+**📚 Full MCP Tools Documentation**: See [`packages/eu-ai-act-mcp/README.md`](../../packages/eu-ai-act-mcp/README.md) for complete tool schemas, input/output formats, and usage examples.
 
 ## ✨ Features
 
 ### 🤖 Intelligent AI Agent
-- **Natural Language Interface**: Ask questions in plain English
-- **Contextual Awareness**: Maintains conversation context throughout the session
-- **Multi-Step Workflows**: Automatically orchestrates complex compliance assessments
-- **Tool Calling**: Seamlessly invokes MCP tools based on user intent
+- **Natural Language Interface**: Ask questions in plain English - no technical knowledge required
+- **Contextual Awareness**: Maintains full conversation context throughout the session
+- **Multi-Step Workflows**: Automatically orchestrates complex compliance assessments across multiple tools
+- **Intelligent Tool Calling**: Seamlessly invokes MCP tools based on user intent and conversation flow
+- **Streaming Responses**: Real-time AI responses with tool execution visibility
+- **Multi-Model Support**: Choose from 6 AI models including free GPT-OSS (default)
 
 ### 📊 Compliance Capabilities
-- **Organization Profiling**: Discover company structure and AI maturity
-- **AI System Discovery**: Catalog and classify all AI systems
-- **Risk Assessment**: Classify systems per EU AI Act (Unacceptable/High/Limited/Minimal)
-- **Gap Analysis**: Identify compliance gaps with specific Article references
-- **Documentation Generation**: Auto-generate required compliance templates
+- **Organization Profiling**: Discover company structure, AI maturity, and regulatory context using Tavily-powered research
+- **AI System Discovery**: Catalog and classify all AI systems with automated risk tier assignment
+- **Risk Assessment**: Classify systems per EU AI Act (Unacceptable/High/Limited/Minimal) with Article references
+- **Gap Analysis**: AI-powered gap identification with severity ratings, remediation effort estimates, and deadlines
+- **Documentation Generation**: Auto-generate professional compliance templates (Risk Management, Technical Documentation)
+- **Multi-Model Assessment**: Leverage 5 different AI models (Claude, GPT-5, Grok, Gemini) for comprehensive analysis
 
 ### 🎨 Gradio UI
 - **Chat Interface**: Clean, modern chat experience
@@ -73,12 +150,48 @@ An interactive AI agent with Gradio UI for navigating EU AI Act compliance requi
 
 - **Node.js** 18+ and pnpm 8+
 - **Python** 3.9+ with uv (fast package manager)
-- **Tavily API key** (required) - Get your free API key from [app.tavily.com](https://app.tavily.com)
+- **Tavily API key** (optional) - Get your free API key from [app.tavily.com](https://app.tavily.com) for enhanced web research
 - **Model selection** - Choose one of the following models:
-  - **Claude 4-5** (Anthropic) - API key required
-  - **GPT-5** (OpenAI) - API key required
-  - **Grok 4-1** (xAI) - API key required
-- **API key for your selected model** - Provide the corresponding API key based on your model choice
+  - 🆓 **GPT-OSS 20B** (Modal.com) - **FREE!** ✅ **DEFAULT MODEL** - Only needs `MODAL_ENDPOINT_URL`
+  - **Claude 4.5 Sonnet** (Anthropic) - `ANTHROPIC_API_KEY` required
+  - **Claude Opus 4** (Anthropic) - `ANTHROPIC_API_KEY` required
+  - **GPT-5** (OpenAI) - `OPENAI_API_KEY` required
+  - **Grok 4.1** (xAI) - `XAI_API_KEY` required
+  - **Gemini 3 Pro** (Google) - `GOOGLE_GENERATIVE_AI_API_KEY` required
+
+### 🆓 Free Default Model: GPT-OSS via Modal.com
+
+**GPT-OSS 20B is the default model** - no API key required! The agent automatically uses GPT-OSS unless you select a different model in the UI.
+
+| Feature         | Details                             |
+| --------------- | ----------------------------------- |
+| **Model**       | OpenAI GPT-OSS 20B (open-source)    |
+| **Cost**        | **FREE** (first $30/month on Modal) |
+| **Setup**       | Just provide Modal endpoint URL     |
+| **Performance** | ~$0.76/hr when running (A10G GPU)   |
+| **Default**     | ✅ **YES** - Automatically selected  |
+
+**Quick Setup (5 minutes):**
+
+1. **Create a free account** at [modal.com](https://modal.com) (first **$30/month FREE**)
+2. **Deploy the model:**
+   ```bash
+   cd modal
+   pip install modal
+   modal setup  # Follow prompts to create account
+   modal deploy gpt_oss_inference.py
+   ```
+3. **Copy the endpoint URL** (e.g., `https://your-workspace--gpt-oss-vllm-inference-serve.modal.run`)
+4. **Set environment variable** or paste in Gradio UI:
+   ```bash
+   export MODAL_ENDPOINT_URL="https://your-workspace--gpt-oss-vllm-inference-serve.modal.run"
+   ```
+
+**That's it!** The agent will use GPT-OSS by default. No API keys needed! 🎉
+
+**Alternative:** Use a shared endpoint if your team has one available.
+
+See [modal/README.md](../../modal/README.md) for detailed deployment instructions and GPU options.
 
 ### Installation
 
@@ -100,12 +213,20 @@ uv pip install -r requirements.txt
 ```bash
 cp .env.example .env
 # Edit .env and add:
-# - TAVILY_API_KEY (required) - Get from https://app.tavily.com
-# - Model API key (choose one):
-#   * ANTHROPIC_API_KEY (for Claude 4-5)
+# - MODAL_ENDPOINT_URL (for FREE GPT-OSS - DEFAULT MODEL) - Deploy via: cd modal && modal deploy gpt_oss_inference.py
+# - TAVILY_API_KEY (optional) - Get from https://app.tavily.com for enhanced web research
+# - Model API key (optional - only if not using GPT-OSS):
+#   * ANTHROPIC_API_KEY (for Claude 4.5 or Claude Opus)
 #   * OPENAI_API_KEY (for GPT-5)
-#   * XAI_API_KEY (for Grok 4-1)
+#   * XAI_API_KEY (for Grok 4.1)
+#   * GOOGLE_GENERATIVE_AI_API_KEY (for Gemini 3 Pro)
 ```
+
+> 💡 **Tip:** 
+> - **GPT-OSS is FREE and the default** - just set `MODAL_ENDPOINT_URL` after deploying to Modal.com
+> - API keys and Modal endpoint can also be entered directly in the Gradio UI
+> - Keys are securely stored in encrypted browser cookies and auto-expire after 24 hours
+> - Modal.com offers **$30/month free credit** - perfect for trying out GPT-OSS!
 
 ### Running the Agent
 
@@ -189,16 +310,22 @@ Agent: I'll assess your chatbot and generate the required documents...
 
 ### API Server (`src/server.ts`)
 - **Port**: Configure via `PORT` env var (default: 3001)
-- **Model**: Select between Claude 4-5, GPT-5, or Grok 4-1 (set corresponding API key)
+- **Model**: Select between 5 models via UI or `AI_MODEL` env var
 - **Streaming**: Enabled for real-time responses
 - **CORS**: Configured for Gradio origin
 - **Required Environment Variables**:
-  - `TAVILY_API_KEY` (required)
-  - One of: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `XAI_API_KEY` (based on model selection)
+  - `TAVILY_API_KEY` (required for web research)
+  - One of the following (based on model selection):
+    - `ANTHROPIC_API_KEY` (for Claude 4.5 or Claude Opus)
+    - `OPENAI_API_KEY` (for GPT-5)
+    - `XAI_API_KEY` (for Grok 4.1)
+    - `GOOGLE_GENERATIVE_AI_API_KEY` (for Gemini 3 Pro)
 
 ### Gradio UI (`src/gradio_app.py`)
 - **Theme**: Custom EU-themed design
 - **Chat History**: Maintains full conversation context
+- **Model Selection**: Dropdown to select AI model in real-time
+- **Secure Key Storage**: API keys stored in encrypted browser cookies (24h expiry)
 - **Export**: Supports markdown and PDF export (optional)
 
 ## 🛠️ Development
@@ -262,9 +389,16 @@ curl -X POST http://localhost:3001/api/chat \
 
 - **Backend**: Node.js + Express + TypeScript
 - **AI SDK**: Vercel AI SDK v5 (upgraded from v4)
-- **LLM**: Claude 4-5, GPT-5, or Grok 4-1 (user selectable)
-- **Research**: Tavily AI for web research
+- **LLM**: 6 models supported (user selectable via UI):
+  - 🆓 **GPT-OSS 20B** (Modal.com) - **FREE!** ✅ **DEFAULT MODEL** - No API key required!
+  - Claude 4.5 Sonnet & Claude Opus 4 (Anthropic)
+  - GPT-5 (OpenAI)
+  - Grok 4.1 (xAI)
+  - Gemini 3 Pro (Google)
+- **Free LLM Hosting**: [Modal.com](https://modal.com) for GPT-OSS deployment
+- **Research**: Tavily AI for web research (optional)
 - **Frontend**: Gradio (Python)
+- **Security**: Encrypted cookie storage for API keys (24h expiry)
 - **MCP**: Model Context Protocol for tool integration
 - **Monorepo**: Turborepo for efficient builds
 
