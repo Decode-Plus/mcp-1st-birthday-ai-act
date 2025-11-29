@@ -81,7 +81,7 @@ echo ""
 cleanup() {
     echo ""
     echo "🛑 Shutting down servers..."
-    kill $API_PID $GRADIO_PID 2>/dev/null
+    kill $API_PID $GRADIO_PID $CHATGPT_PID 2>/dev/null
     exit 0
 }
 
@@ -96,24 +96,32 @@ API_PID=$!
 echo "Waiting for API server to start..."
 sleep 3
 
-# Start Gradio in background (using virtual environment Python)
+# Start Gradio UI in background (using virtual environment Python)
 echo "Starting Gradio UI..."
 python src/gradio_app.py > /tmp/eu-ai-act-gradio.log 2>&1 &
 GRADIO_PID=$!
 
-# Wait for Gradio to be ready
+# Start ChatGPT App in background (using virtual environment Python)
+echo "Starting ChatGPT App..."
+python src/chatgpt_app.py > /tmp/eu-ai-act-chatgpt.log 2>&1 &
+CHATGPT_PID=$!
+
+# Wait for apps to be ready
 sleep 3
 
 echo ""
-echo "✅ Both servers are running!"
+echo "✅ All servers are running!"
 echo ""
-echo "🌐 Open your browser to: http://localhost:7860"
+echo "🌐 Open your browser to:"
+echo "   Gradio UI:    http://localhost:7860"
+echo "   ChatGPT App:  http://localhost:7861"
 echo ""
 echo "📋 Logs:"
-echo "   API: tail -f /tmp/eu-ai-act-api.log"
-echo "   Gradio: tail -f /tmp/eu-ai-act-gradio.log"
+echo "   API:         tail -f /tmp/eu-ai-act-api.log"
+echo "   Gradio:      tail -f /tmp/eu-ai-act-gradio.log"
+echo "   ChatGPT App: tail -f /tmp/eu-ai-act-chatgpt.log"
 echo ""
 
-# Wait for both processes
-wait $API_PID $GRADIO_PID
+# Wait for all processes
+wait $API_PID $GRADIO_PID $CHATGPT_PID
 

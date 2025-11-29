@@ -28,7 +28,7 @@ AVAILABLE_MODELS = {
     "gpt-oss": {
         "name": "🆓 GPT-OSS 20B (Modal - FREE)",
         "api_key_env": "MODAL_ENDPOINT_URL",
-        "description": "Free OpenAI GPT-OSS 20B model hosted on Modal.com - No API key required!"
+        "description": "Free OpenAI GPT-OSS 20B model hosted on Modal.com - No API key required! ⚠️ May take up to 60s to start responding (cold start). For faster responses and better precision, use another model with your API key."
     },
     "claude-4.5": {
         "name": "Claude 4.5 Sonnet (Anthropic)",
@@ -1286,7 +1286,38 @@ with gr.Blocks(
             <h1 style="margin: 0; font-size: 2em;">🇪🇺 EU AI Act Compliance Agent</h1>
             <p style="margin: 10px 0 0 0; opacity: 0.8;">by <a href="https://www.legitima.ai" target="_blank" style="color: #4CAF50;">Legitima.ai</a></p>
             <p style="margin: 5px 0; font-size: 0.9em; opacity: 0.7;">Your intelligent assistant for navigating European AI regulation</p>
+            <p style="margin: 10px 0 0 0; font-size: 0.9em;" id="chatgpt-app-container">
+                <a href="http://localhost:7861" id="chatgpt-app-link" target="_blank" style="color: #2196F3; text-decoration: none; padding: 6px 12px; border: 1px solid #2196F3; border-radius: 4px; display: inline-block;">
+                    💬 Open ChatGPT App (MCP Server)
+                </a>
+            </p>
         </div>
+        <script>
+        (function() {
+            const currentHost = window.location.hostname;
+            const container = document.getElementById('chatgpt-app-container');
+            const link = document.getElementById('chatgpt-app-link');
+            
+            // Check if running on HF Spaces (*.hf.space domain)
+            const isHFSpaces = currentHost.endsWith('.hf.space') || currentHost.includes('huggingface.co');
+            
+            if (currentHost === 'localhost' || currentHost === '127.0.0.1') {
+                // Local development - direct link to port 7861
+                link.href = 'http://localhost:7861';
+            } else if (isHFSpaces) {
+                // HF Spaces - ChatGPT app creates a gradio.live URL (printed in Space logs)
+                container.innerHTML = `
+                    <span style="color: #666; font-size: 0.85em;">
+                        💬 <strong>ChatGPT App MCP Server:</strong> Check Space logs for the <code>gradio.live</code> URL
+                        <br><small style="opacity: 0.7;">The MCP URL is auto-generated and printed when the Space starts</small>
+                    </span>
+                `;
+            } else {
+                // Other deployments - try same host with port 7861
+                link.href = `${window.location.protocol}//${currentHost}:7861`;
+            }
+        })();
+        </script>
     """)
     
     # Main content
@@ -1323,12 +1354,14 @@ with gr.Blocks(
                 choices=[(v["name"], k) for k, v in AVAILABLE_MODELS.items()],
                 value=current_model_settings["model"],  # Use current model setting
                 label="AI Model",
-                info="Select the AI model to use (GPT-OSS is FREE!)"
+                info="Select the AI model to use. ⚠️ GPT-OSS is FREE but may take up to 60s to start (cold start). For faster responses and better precision, use another model with your API key."
             )
             
             # API Key inputs (password fields) - GPT-OSS is FREE, other models require API keys
             with gr.Accordion("🔑 API Keys & Settings", open=True):
                 gr.Markdown("""🆓 **GPT-OSS 20B is FREE** - Uses pre-configured Modal endpoint (no setup required).
+
+⏱️ **Note:** GPT-OSS may take up to **60 seconds** to start responding due to cold start. For **faster responses and better precision**, select another model and provide your API key below.
 
 ⚠️ For paid models (Claude, GPT-5, Gemini, Grok), an API key is required.
 
@@ -1407,6 +1440,51 @@ with gr.Blocks(
                 value=get_available_tools(),
                 label="🔧 MCP Tools - Generate Reports & Documentation"
             )
+            
+            gr.Markdown("---")
+            
+            gr.HTML("""
+            <div>
+                <h3 style="margin-bottom: 10px;">🔗 Other Interfaces</h3>
+                <div id="chatgpt-app-sidebar-container">
+                    <a href="http://localhost:7861" id="chatgpt-app-link-sidebar" target="_blank" style="color: #2196F3; text-decoration: none; padding: 8px 16px; border: 1px solid #2196F3; border-radius: 6px; display: inline-block; margin: 5px 0;">
+                        💬 ChatGPT App (MCP Server)
+                    </a>
+                    <p style="font-size: 0.85em; opacity: 0.7; margin-top: 8px;">
+                        Use the ChatGPT App to connect with ChatGPT Desktop and access MCP tools via OpenAI Apps SDK.
+                    </p>
+                </div>
+            </div>
+            <script>
+            (function() {
+                const currentHost = window.location.hostname;
+                const container = document.getElementById('chatgpt-app-sidebar-container');
+                const link = document.getElementById('chatgpt-app-link-sidebar');
+                
+                // Check if running on HF Spaces (*.hf.space domain)
+                const isHFSpaces = currentHost.endsWith('.hf.space') || currentHost.includes('huggingface.co');
+                
+                if (currentHost === 'localhost' || currentHost === '127.0.0.1') {
+                    // Local development - direct link to port 7861
+                    link.href = 'http://localhost:7861';
+                } else if (isHFSpaces) {
+                    // HF Spaces - ChatGPT app creates a gradio.live URL (printed in Space logs)
+                    container.innerHTML = `
+                        <div style="background: #e3f2fd; padding: 12px; border-radius: 6px; margin: 5px 0;">
+                            <strong style="color: #1565c0;">💬 ChatGPT App (MCP Server)</strong>
+                            <p style="font-size: 0.85em; margin: 8px 0 0 0; color: #333;">
+                                The MCP URL is auto-generated when this Space starts.
+                                <br><strong>Check the Space logs</strong> for the <code style="background: #fff; padding: 2px 4px; border-radius: 3px;">gradio.live</code> URL.
+                            </p>
+                        </div>
+                    `;
+                } else {
+                    // Other deployments - try same host with port 7861
+                    link.href = `${window.location.protocol}//${currentHost}:7861`;
+                }
+            })();
+            </script>
+            """)
             
             gr.Markdown("---")
             

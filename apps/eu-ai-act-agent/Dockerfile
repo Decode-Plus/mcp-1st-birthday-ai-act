@@ -39,12 +39,17 @@ ENV NODE_ENV=production \
     API_URL=http://localhost:3001 \
     GRADIO_SERVER_NAME=0.0.0.0 \
     GRADIO_SERVER_PORT=7860 \
+    GRADIO_SHARE=true \
     PATH=/home/node/venv/bin:$PATH \
     VIRTUAL_ENV=/home/node/venv \
     MCP_SERVER_PATH=/home/node/app/packages/eu-ai-act-mcp/dist/index.js
 
-EXPOSE 7860
+EXPOSE 7860 7861
 
-# Start API server + Gradio UI
-CMD cd apps/eu-ai-act-agent && node dist/server.js & sleep 3 && cd apps/eu-ai-act-agent && python src/gradio_app.py
+# Start API server + Gradio UI + ChatGPT App (MCP Server)
+CMD cd apps/eu-ai-act-agent && \
+    node dist/server.js & \
+    sleep 3 && \
+    python src/chatgpt_app.py & \
+    python src/gradio_app.py
 

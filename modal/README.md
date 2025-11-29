@@ -54,13 +54,13 @@ GPU_CONFIG = "A10G"  # ~$0.76/hr - RECOMMENDED for budget ✅
 
 ### GPU Pricing Comparison
 
-| GPU | VRAM | Price/hr | Best For |
-|-----|------|----------|----------|
-| L4 | 24GB | ~$0.59 | Tightest budget (may be tight) |
-| **A10G** | 24GB | **~$0.76** | **Best value for GPT-OSS 20B** ✅ |
-| A100 40GB | 40GB | ~$1.79 | More headroom |
-| A100 80GB | 80GB | ~$2.78 | Both 20B and 120B |
-| H100 | 80GB | ~$3.95 | Maximum performance |
+| GPU       | VRAM | Price/hr   | Best For                         |
+| --------- | ---- | ---------- | -------------------------------- |
+| L4        | 24GB | ~$0.59     | Tightest budget (may be tight)   |
+| **A10G**  | 24GB | **~$0.76** | **Best value for GPT-OSS 20B** ✅ |
+| A100 40GB | 40GB | ~$1.79     | More headroom                    |
+| A100 80GB | 80GB | ~$2.78     | Both 20B and 120B                |
+| H100      | 80GB | ~$3.95     | Maximum performance              |
 
 ### Model Selection
 
@@ -79,19 +79,41 @@ MODEL_NAME = "openai/gpt-oss-120b"
 # FAST_BOOT = False - Slower startup, faster inference
 FAST_BOOT = True
 
+# Data type - GPT-OSS MXFP4 quantization REQUIRES bfloat16 (float16 not supported)
+# The Marlin kernel warning on A10G/L4 is expected and can be ignored
+USE_FLOAT16 = False  # Must be False for GPT-OSS (MXFP4 only supports bfloat16)
+
+# Maximum model length (context window) - reduce to speed up startup
+MAX_MODEL_LEN = 32768  # 32k tokens (can increase to 131072 if needed)
+
+# Keep container warm longer to avoid cold starts
+SCALEDOWN_WINDOW = 5 * MINUTES  # Reduced from 10 minutes for faster warm starts
+
 # Maximum concurrent requests (reduce for smaller GPUs)
 MAX_INPUTS = 50
 ```
 
+#### Startup Time Optimization
+
+The following optimizations are enabled by default to reduce the ~1 minute startup time:
+
+- **`--max-model-len 65536`**: Limits context window to 64k tokens (faster startup, can increase to 131072 if needed)
+- **`--disable-custom-all-reduce`**: Disabled for single GPU (reduces startup overhead)
+- **`--enable-prefix-caching`**: Enables prefix caching for faster subsequent requests
+- **`--load-format auto`**: Auto-detects best loading format for faster model loading
+- **Reduced scaledown window**: Keeps container warm for 5 minutes instead of 10 (faster warm starts)
+
+Note: `--dtype bfloat16` is required for GPT-OSS (MXFP4 quantization only supports bf16)
+
 ## 🔧 Commands
 
-| Command | Description |
-|---------|-------------|
-| `modal run gpt_oss_inference.py` | Test with a temporary server |
-| `modal deploy gpt_oss_inference.py` | Deploy to production |
-| `modal app stop gpt-oss-vllm-inference` | Stop the deployed app |
-| `modal app logs gpt-oss-vllm-inference` | View deployment logs |
-| `modal volume ls` | List cached volumes |
+| Command                                 | Description                  |
+| --------------------------------------- | ---------------------------- |
+| `modal run gpt_oss_inference.py`        | Test with a temporary server |
+| `modal deploy gpt_oss_inference.py`     | Deploy to production         |
+| `modal app stop gpt-oss-vllm-inference` | Stop the deployed app        |
+| `modal app logs gpt-oss-vllm-inference` | View deployment logs         |
+| `modal volume ls`                       | List cached volumes          |
 
 ## 🌐 API Usage
 
@@ -174,6 +196,26 @@ If your selected GPU is not available, Modal will queue your request. Tips:
 - Try different regions
 - Use off-peak hours
 - Change `GPU_CONFIG` to a different tier
+
+### Marlin Kernel Warning
+If you see: `You are running Marlin kernel with bf16 on GPUs before SM90`:
+- **This warning can be safely ignored** - GPT-OSS uses MXFP4 quantization which **requires bfloat16**
+- float16 is NOT supported for MXFP4 quantization (will cause a validation error)
+- The warning is just a performance suggestion, but we cannot use fp16 for this model
+- For optimal performance, use H100 (SM90+) which is optimized for bf16
+
+### Startup Time Optimization
+If startup takes ~1 minute:
+- ✅ **Already optimized** - The code includes several optimizations:
+  - Uses `float16` instead of `bfloat16` for faster loading
+  - Limits context window to 32k tokens (faster memory allocation)
+  - Disables custom all-reduce for single GPU
+  - Enables prefix caching
+  - Uses auto load format detection
+- To reduce startup further, you can:
+  - Increase `SCALEDOWN_WINDOW` to keep container warm longer (costs more)
+  - Use a larger GPU (A100/H100) for faster model loading
+  - Reduce `MAX_MODEL_LEN` if you don't need full context window
 
 ### Cache Issues
 ```bash

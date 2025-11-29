@@ -43,7 +43,6 @@ git remote add hf "https://huggingface.co/spaces/$HF_SPACE"
 git push hf main --force
 
 echo "✅ Deployed: https://huggingface.co/spaces/$HF_SPACE"
-echo "⚠️  Set secrets: XAI_API_KEY, TAVILY_API_KEY"
 
 # Cleanup
 cd -

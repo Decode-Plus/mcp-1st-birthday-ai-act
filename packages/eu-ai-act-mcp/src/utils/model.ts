@@ -48,7 +48,9 @@ export function getModel(modelParam?: string, context?: string) {
       baseURL: `${modalEndpoint}/v1`,
     });
     console.error(`${logPrefix} GPT-OSS endpoint: ${modalEndpoint}`);
-    return modalClient("llm");  // Model name is "llm" on vLLM server
+    // IMPORTANT: Use .chat() to force Chat Completions API (/v1/chat/completions)
+    // AI SDK 5+ defaults to Responses API (/v1/responses) which vLLM doesn't support
+    return modalClient.chat("llm");  // Model name is "llm" on vLLM server
   }
   
   if (modelEnv === "gpt-5") {

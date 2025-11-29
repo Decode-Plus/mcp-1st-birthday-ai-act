@@ -908,10 +908,6 @@ def compliance_widget():
 
 with gr.Blocks(
     title="🇪🇺 EU AI Act - ChatGPT App",
-    theme=gr.themes.Soft(
-        primary_hue="blue",
-        secondary_hue="indigo",
-    )
 ) as demo:
     
     gr.HTML("""

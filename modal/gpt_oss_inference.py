@@ -83,6 +83,8 @@ vllm_cache_vol = modal.Volume.from_name("vllm-cache", create_if_missing=True)
 # Performance Configuration
 # =============================================================================
 
+MINUTES = 60  # Helper constant
+
 # FAST_BOOT = True: Faster startup but slower inference
 # FAST_BOOT = False: Slower startup but faster inference (recommended for production)
 FAST_BOOT = True  # Use True for cheaper GPUs to reduce startup memory
@@ -90,12 +92,22 @@ FAST_BOOT = True  # Use True for cheaper GPUs to reduce startup memory
 # CUDA graph capture sizes for optimized inference
 CUDA_GRAPH_CAPTURE_SIZES = [1, 2, 4, 8, 16, 24, 32]
 
+# Data type configuration
+# NOTE: GPT-OSS uses MXFP4 quantization which REQUIRES bfloat16 - float16 is NOT supported
+# The Marlin kernel warning on A10G/L4 is expected and can be ignored
+USE_FLOAT16 = False  # Must be False for GPT-OSS (MXFP4 only supports bfloat16)
+
+# Maximum model length (context window) - reduce to speed up startup
+# GPT-OSS 20B supports up to 128k tokens, but smaller = faster startup
+MAX_MODEL_LEN = 32768 * 2 # 64k tokens (can increase if needed)
+
 # Server configuration
 VLLM_PORT = 8000
 N_GPU = 1  # Number of GPUs for tensor parallelism
 MAX_INPUTS = 50  # Reduced for smaller GPUs
 
-MINUTES = 60  # Helper constant
+# Keep container warm longer to avoid cold starts (costs more but faster response)
+SCALEDOWN_WINDOW = 5 * MINUTES  # Reduced from 10 minutes for faster warm starts
 
 # =============================================================================
 # Modal App Definition
@@ -119,7 +131,7 @@ SELECTED_GPU = _GPU_MAP.get(GPU_CONFIG, "A10G")
 @app.function(
     image=vllm_image,
     gpu=SELECTED_GPU,
-    scaledown_window=10 * MINUTES,  # Renamed from container_idle_timeout
+    scaledown_window=SCALEDOWN_WINDOW,
     timeout=30 * MINUTES,
     volumes={
         "/root/.cache/huggingface": hf_cache_vol,
@@ -151,11 +163,34 @@ def serve():
     # default is no-enforce-eager. see the --compilation-config flag for tighter control
     cmd += ["--enforce-eager" if FAST_BOOT else "--no-enforce-eager"]
 
-    if not FAST_BOOT:  # CUDA graph capture is only used with `--enforce-eager`
+    if not FAST_BOOT:  # CUDA graph capture is only used with `--no-enforce-eager`
         cmd += [
             "-O.cudagraph_capture_sizes="
             + str(CUDA_GRAPH_CAPTURE_SIZES).replace(" ", "")
         ]
+
+    # Data type optimization: use float16 for A10G/L4 (SM86) to avoid Marlin kernel warning
+    # bf16 is optimized for SM90+ (H100), fp16 is better for Ampere architecture
+    if USE_FLOAT16:
+        cmd += ["--dtype", "float16"]
+    else:
+        cmd += ["--dtype", "bfloat16"]
+
+    # Limit context length to speed up startup and reduce memory allocation
+    cmd += ["--max-model-len", str(MAX_MODEL_LEN)]
+
+    # Disable custom all-reduce for single GPU (reduces startup overhead)
+    if N_GPU == 1:
+        cmd += ["--disable-custom-all-reduce"]
+
+    # Enable prefix caching for faster subsequent requests
+    cmd += ["--enable-prefix-caching"]
+
+    # Trust remote code for GPT-OSS models
+    cmd += ["--trust-remote-code"]
+
+    # Optimize loading format for faster startup
+    cmd += ["--load-format", "auto"]  # Auto-detect best format
 
     # assume multiple GPUs are for splitting up large matrix multiplications
     cmd += ["--tensor-parallel-size", str(N_GPU)]

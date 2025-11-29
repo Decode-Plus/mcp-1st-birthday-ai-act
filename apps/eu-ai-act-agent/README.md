@@ -12,6 +12,9 @@ tags:
   - gemini
   - claude
   - gpt-apps
+  - gradio-app
+  - gradio-mcp
+  - gradio-chatgpt-app
   - gpt-oss
 short_description: AI-powered EU AI Act compliance assessment with MCP tools
 ---
@@ -30,6 +33,7 @@ An interactive AI agent with Gradio UI for navigating EU AI Act compliance requi
 This submission showcases:
 - **Custom MCP Server** with 3 specialized tools for EU AI Act compliance
 - **Enterprise-grade Agent** using Vercel AI SDK v5 with intelligent tool orchestration
+- **ChatGPT Apps Integration** - Deploy as a connector to use tools directly in ChatGPT
 - **Multi-model Support** - 6 AI models including free GPT-OSS via Modal.com
 - **Real-world Application** - Solving critical regulatory compliance challenges
 - **Production-ready Architecture** - Gradio UI + Express API + MCP Protocol
@@ -119,6 +123,8 @@ This agent leverages a **custom MCP server** (`@eu-ai-act/mcp-server`) that prov
 
 **📚 Full MCP Tools Documentation**: See [`packages/eu-ai-act-mcp/README.md`](../../packages/eu-ai-act-mcp/README.md) for complete tool schemas, input/output formats, and usage examples.
 
+**💬 Use in ChatGPT**: The MCP server can be deployed as a ChatGPT App connector - see [How to Use in ChatGPT](#-how-to-use-in-chatgpt) section below for instructions.
+
 ## ✨ Features
 
 ### 🤖 Intelligent AI Agent
@@ -152,24 +158,27 @@ This agent leverages a **custom MCP server** (`@eu-ai-act/mcp-server`) that prov
 - **Python** 3.9+ with uv (fast package manager)
 - **Tavily API key** (optional) - Get your free API key from [app.tavily.com](https://app.tavily.com) for enhanced web research
 - **Model selection** - Choose one of the following models:
-  - 🆓 **GPT-OSS 20B** (Modal.com) - **FREE!** ✅ **DEFAULT MODEL** - Only needs `MODAL_ENDPOINT_URL`
-  - **Claude 4.5 Sonnet** (Anthropic) - `ANTHROPIC_API_KEY` required
-  - **Claude Opus 4** (Anthropic) - `ANTHROPIC_API_KEY` required
-  - **GPT-5** (OpenAI) - `OPENAI_API_KEY` required
-  - **Grok 4.1** (xAI) - `XAI_API_KEY` required
-  - **Gemini 3 Pro** (Google) - `GOOGLE_GENERATIVE_AI_API_KEY` required
+  - 🆓 **GPT-OSS 20B** (Modal.com) - **FREE!** ✅ **DEFAULT MODEL** - Only needs `MODAL_ENDPOINT_URL` (⚠️ may take up to 60s to start responding)
+  - **Claude 4.5 Sonnet** (Anthropic) - `ANTHROPIC_API_KEY` required - Faster & more precise
+  - **Claude Opus 4** (Anthropic) - `ANTHROPIC_API_KEY` required - Faster & more precise
+  - **GPT-5** (OpenAI) - `OPENAI_API_KEY` required - Faster & more precise
+  - **Grok 4.1** (xAI) - `XAI_API_KEY` required - Faster & more precise
+  - **Gemini 3 Pro** (Google) - `GOOGLE_GENERATIVE_AI_API_KEY` required - Faster & more precise
 
 ### 🆓 Free Default Model: GPT-OSS via Modal.com
 
 **GPT-OSS 20B is the default model** - no API key required! The agent automatically uses GPT-OSS unless you select a different model in the UI.
 
-| Feature         | Details                             |
-| --------------- | ----------------------------------- |
-| **Model**       | OpenAI GPT-OSS 20B (open-source)    |
-| **Cost**        | **FREE** (first $30/month on Modal) |
-| **Setup**       | Just provide Modal endpoint URL     |
-| **Performance** | ~$0.76/hr when running (A10G GPU)   |
-| **Default**     | ✅ **YES** - Automatically selected  |
+| Feature           | Details                                        |
+| ----------------- | ---------------------------------------------- |
+| **Model**         | OpenAI GPT-OSS 20B (open-source)               |
+| **Cost**          | **FREE** (first $30/month on Modal)            |
+| **Setup**         | Just provide Modal endpoint URL                |
+| **Performance**   | ~$0.76/hr when running (A10G GPU)              |
+| **Response Time** | ⚠️ **May take up to 60s to start** (cold start) |
+| **Default**       | ✅ **YES** - Automatically selected             |
+
+> ⚠️ **Important:** GPT-OSS may take up to **60 seconds** to start responding due to Modal.com's cold start behavior. For **faster responses and better precision**, select another model (Claude, GPT-5, Gemini, or Grok) and provide your API key in the Gradio UI.
 
 **Quick Setup (5 minutes):**
 
@@ -251,6 +260,65 @@ uv run src/gradio_app.py
 ```
 
 The Gradio UI will be available at `http://localhost:7860` 🎉
+
+## 🚀 How to Use in ChatGPT
+
+The MCP server can be deployed as a **ChatGPT App** (connector) to use EU AI Act compliance tools directly in ChatGPT conversations!
+
+### Quick Start
+
+1. **Start the ChatGPT App** with `share=True`:
+   ```bash
+   cd apps/eu-ai-act-agent
+   uv run src/chatgpt_app.py
+   ```
+   
+   The app will automatically:
+   - Create a public URL (via Gradio's share feature)
+   - Enable MCP server mode
+   - Display the MCP server URL in the terminal
+
+2. **Enable Developer Mode in ChatGPT**:
+   - Go to **Settings** → **Apps & Connectors** → **Advanced settings**
+   - Enable **Developer Mode**
+
+3. **Create a Connector**:
+   - In ChatGPT, go to **Settings** → **Apps & Connectors**
+   - Click **Create Connector**
+   - Enter the MCP server URL from the terminal (e.g., `https://xxxxx.gradio.live`)
+   - Name it `eu-ai-act` (or your preferred name)
+
+4. **Chat with ChatGPT using the connector**:
+   - In any ChatGPT conversation, type `@eu-ai-act` to activate the connector
+   - Ask questions like:
+     - `@eu-ai-act Analyze OpenAI's EU AI Act compliance status`
+     - `@eu-ai-act What risk category is a recruitment screening AI?`
+     - `@eu-ai-act Generate compliance documentation for our chatbot`
+
+### Available Tools in ChatGPT
+
+Once connected, you'll have access to all three MCP tools:
+
+- **`discover_organization`** 🏢 - Discover and profile organizations
+- **`discover_ai_services`** 🤖 - Inventory and classify AI systems
+- **`assess_compliance`** ⚖️ - AI-powered compliance assessment
+
+ChatGPT will automatically call these tools based on your conversation context!
+
+### Configuration
+
+The ChatGPT app runs on a separate port (default: `7861`) to avoid conflicts with the main Gradio UI:
+
+```bash
+# Customize port and server name via environment variables
+export CHATGPT_APP_SERVER_PORT=7861
+export CHATGPT_APP_SERVER_NAME=0.0.0.0
+
+# Run the app
+uv run src/chatgpt_app.py
+```
+
+> 💡 **Note:** The `share=True` parameter is required to create a public URL that ChatGPT can access. This uses Gradio's free sharing service.
 
 ## 📖 Usage Examples
 
@@ -390,11 +458,11 @@ curl -X POST http://localhost:3001/api/chat \
 - **Backend**: Node.js + Express + TypeScript
 - **AI SDK**: Vercel AI SDK v5 (upgraded from v4)
 - **LLM**: 6 models supported (user selectable via UI):
-  - 🆓 **GPT-OSS 20B** (Modal.com) - **FREE!** ✅ **DEFAULT MODEL** - No API key required!
-  - Claude 4.5 Sonnet & Claude Opus 4 (Anthropic)
-  - GPT-5 (OpenAI)
-  - Grok 4.1 (xAI)
-  - Gemini 3 Pro (Google)
+  - 🆓 **GPT-OSS 20B** (Modal.com) - **FREE!** ✅ **DEFAULT MODEL** - No API key required! (⚠️ may take up to 60s to start)
+  - Claude 4.5 Sonnet & Claude Opus 4 (Anthropic) - Faster & more precise
+  - GPT-5 (OpenAI) - Faster & more precise
+  - Grok 4.1 (xAI) - Faster & more precise
+  - Gemini 3 Pro (Google) - Faster & more precise
 - **Free LLM Hosting**: [Modal.com](https://modal.com) for GPT-OSS deployment
 - **Research**: Tavily AI for web research (optional)
 - **Frontend**: Gradio (Python)

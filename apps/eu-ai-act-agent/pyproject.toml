@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "EU AI Act Compliance Agent with Gradio UI"
 requires-python = ">=3.10"
 dependencies = [
-    "gradio>=6.0.0",
+    "gradio[mcp]>=6.0.0",
     "requests>=2.31.0",
     "python-dotenv>=1.0.0",
 ]
