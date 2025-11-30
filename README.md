@@ -254,7 +254,7 @@ Takes organization and service context to produce:
 ```
 
 > 🆓 **Note:** 
-> - **GPT-OSS is the default model** and is **FREE** - only needs `MODAL_ENDPOINT_URL` (no API key!)
+> - **GPT-OSS is the default model** and is **FREE** - (no API key!)
 > - Deploy your own: `cd modal && modal deploy gpt_oss_inference.py`
 > - You only need to provide credentials for the model you want to use
 > - Tavily API key is optional - enhances web research but AI model works as fallback
@@ -433,7 +433,7 @@ See [apps/eu-ai-act-agent/QUICKSTART.md](apps/eu-ai-act-agent/QUICKSTART.md) for
 - Python 3.9+ with uv (fast package manager)
 - **Tavily API key** (optional) - Get your free API key from [app.tavily.com](https://app.tavily.com) for enhanced web research
 - **Model selection** - Choose one of the following models:
-  - 🆓 **GPT-OSS 20B** (Modal.com) - **FREE!** ✅ **DEFAULT MODEL** - Only needs `MODAL_ENDPOINT_URL`
+  - 🆓 **GPT-OSS 20B** (Modal.com) - **FREE!** ✅ 
   - **Claude 4.5 Sonnet** (Anthropic) - `ANTHROPIC_API_KEY` required
   - **Claude Opus 4** (Anthropic) - `ANTHROPIC_API_KEY` required
   - **GPT-5** (OpenAI) - `OPENAI_API_KEY` required

@@ -1635,7 +1635,7 @@ with gr.Blocks(
         - is_valid: True if all required keys are present
         - error_message: Description of missing keys if not valid
         
-        Note: GPT-OSS is FREE and only needs Modal endpoint URL.
+        Note: GPT-OSS is FREE and no API key is required.
         Tavily API key is optional - the system will fallback to AI model for research.
         """
         missing_keys = []

@@ -162,7 +162,7 @@ This agent leverages a **custom MCP server** (`@eu-ai-act/mcp-server`) that prov
 - **Python** 3.9+ with uv (fast package manager)
 - **Tavily API key** (optional) - Get your free API key from [app.tavily.com](https://app.tavily.com) for enhanced web research
 - **Model selection** - Choose one of the following models:
-  - 🆓 **GPT-OSS 20B** (Modal.com) - **FREE!** ✅ **DEFAULT MODEL** - Only needs `MODAL_ENDPOINT_URL` (⚠️ may take up to 60s to start responding)
+  - 🆓 **GPT-OSS 20B** (Modal.com) - **FREE!** ✅ **DEFAULT MODEL** - (⚠️ may take up to 60s to start responding)
   - **Claude 4.5 Sonnet** (Anthropic) - `ANTHROPIC_API_KEY` required - Faster & more precise
   - **Claude Opus 4** (Anthropic) - `ANTHROPIC_API_KEY` required - Faster & more precise
   - **GPT-5** (OpenAI) - `OPENAI_API_KEY` required - Faster & more precise
