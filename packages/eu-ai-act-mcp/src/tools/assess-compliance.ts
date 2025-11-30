@@ -696,8 +696,8 @@ export async function assessCompliance(
   const model = getModel(modelName, apiKeys, "assess_compliance");
   const now = new Date().toISOString();
   
-  // Step 1: Generate compliance assessment using Grok 4
-  console.error("\n🧠 Analyzing compliance (streaming thinking tokens)...");
+  // Step 1: Generate compliance assessment
+  console.error("\n🧠 Analyzing compliance...");
   
   const assessmentPrompt = generateAssessmentPrompt(
     organizationContext,
@@ -705,49 +705,37 @@ export async function assessCompliance(
     focusAreas
   );
   
-  // Use streamText to get thinking tokens in real-time
+  // Use streamText - reasoning DISABLED for faster responses
   const assessmentStream = streamText({
     model,
     system: "You are an expert EU AI Act compliance consultant. Provide detailed, actionable compliance assessments in valid JSON format only. Always respond with a valid JSON object.",
     prompt: assessmentPrompt,
-    temperature: 0.3,
-    // Reduce reasoning effort to prevent timeouts (LOW for speed)
+    temperature: 0.1,
+    // Reasoning DISABLED for speed
     providerOptions: {
       anthropic: {
-        thinking: { type: "enabled", budgetTokens: 1500 },  // Minimal thinking budget for Claude - faster
+        thinking: { type: "disabled" },  // Disabled for faster responses
       },
       openai: {
-        reasoningEffort: "low",  // Low reasoning effort for GPT - much faster
+        // No reasoningEffort - faster responses
       },
       google: {
-        thinkingConfig: {
-          thinkingLevel: "low",  // Low thinking for faster responses
-          includeThoughts: true,
-        },
+        // No thinkingConfig - faster responses
       },
     },
   });
   
-  // Stream and log thinking tokens as they come
+  // Stream text content (reasoning disabled)
   let assessmentContent = "";
-  console.error("\n--- Model Thinking (Assessment) ---");
   
   for await (const event of assessmentStream.fullStream) {
-    // Handle reasoning tokens (Claude uses reasoning-signature, others may use different types)
-    if ((event as any).type === "reasoning" || (event as any).type === "reasoning-signature") {
-      const reasoning = (event as any).textDelta ?? (event as any).reasoning ?? (event as any).signature ?? "";
-      if (reasoning) {
-        process.stderr.write(`💭 ${reasoning}`);
-      }
-    } else if (event.type === "text-delta") {
+    if (event.type === "text-delta") {
       const text = (event as any).textDelta ?? "";
       assessmentContent += text;
-      // Also log text as it streams
+      // Log text as it streams
       process.stderr.write(text);
     }
   }
-  
-  console.error("\n--- End Thinking ---\n");
   
   // Ensure we have the full text
   const finalResult = await assessmentStream;
@@ -783,7 +771,7 @@ export async function assessCompliance(
   let documentationFilePaths: string[] = [];
   
   if (generateDocumentation) {
-    console.error("\n📄 Generating documentation templates (streaming thinking tokens)...");
+    console.error("\n📄 Generating documentation templates...");
     
     const docPrompt = generateDocumentationPrompt(
       organizationContext,
@@ -791,49 +779,37 @@ export async function assessCompliance(
       { gaps: assessmentData.gaps, recommendations: assessmentData.recommendations }
     );
     
-    // Use streamText to get thinking tokens in real-time
+    // Use streamText - reasoning DISABLED for faster responses
     const docStream = streamText({
       model,
       system: "You are an expert EU AI Act compliance documentation specialist. Generate professional documentation templates in valid JSON format with markdown content. Always respond with a valid JSON object.",
       prompt: docPrompt,
       temperature: 0.2,
-      // Reduce reasoning effort to prevent timeouts (LOW for speed)
+      // Reasoning DISABLED for speed
       providerOptions: {
         anthropic: {
-          thinking: { type: "enabled", budgetTokens: 1500 },  // Minimal thinking budget for Claude - faster
+          thinking: { type: "disabled" },  // Disabled for faster responses
         },
         openai: {
-          reasoningEffort: "low",  // Low reasoning effort for GPT - much faster
+          // No reasoningEffort - faster responses
         },
         google: {
-          thinkingConfig: {
-            thinkingLevel: "low",  // Low thinking for faster responses
-            includeThoughts: true,
-          },
+          // No thinkingConfig - faster responses
         },
       },
     });
     
-    // Stream and log thinking tokens as they come
+    // Stream text content (reasoning disabled)
     let docContent = "";
-    console.error("\n--- Model Thinking (Documentation) ---");
     
     for await (const event of docStream.fullStream) {
-      // Handle reasoning tokens (Claude uses reasoning-signature, others may use different types)
-      if ((event as any).type === "reasoning" || (event as any).type === "reasoning-signature") {
-        const reasoning = (event as any).textDelta ?? (event as any).reasoning ?? (event as any).signature ?? "";
-        if (reasoning) {
-          process.stderr.write(`💭 ${reasoning}`);
-        }
-      } else if (event.type === "text-delta") {
+      if (event.type === "text-delta") {
         const text = (event as any).textDelta ?? "";
         docContent += text;
-        // Also log text as it streams
+        // Log text as it streams
         process.stderr.write(text);
       }
     }
-    
-    console.error("\n--- End Thinking ---\n");
     
     // Ensure we have the full text
     const finalDocResult = await docStream;
