@@ -32,9 +32,9 @@ API_URL = os.getenv("API_URL", "http://localhost:3001")
 PUBLIC_URL = os.getenv("PUBLIC_URL", "")  # HF Spaces public URL (empty for local dev)
 API_TIMEOUT = 600  # seconds for internal API calls
 
-# ChatGPT MCP has a timeout of ~60 seconds for tool responses
-# We need to return a response within this window
-CHATGPT_TOOL_TIMEOUT = 55  # seconds - leave 5s buffer for network latency
+# MCP tool timeout - allow 2 minutes for long-running AI assessments
+# GPT-OSS model can take 1-2 minutes for complex compliance assessments
+CHATGPT_TOOL_TIMEOUT = 120  # seconds (2 minutes) for tool responses
 
 # Thread pool for async API calls with timeout handling
 _executor = ThreadPoolExecutor(max_workers=4)
