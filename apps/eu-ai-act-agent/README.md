@@ -1,5 +1,5 @@
 ---
-title: EU AI Act Compliance Agent
+title: EU AI Act Compliance Agent by legitima.ai
 emoji: ⚖️
 colorFrom: blue
 colorTo: indigo
@@ -19,12 +19,31 @@ tags:
 short_description: AI-powered EU AI Act compliance assessment with MCP tools
 ---
 
-# 🇪🇺 EU AI Act Compliance Agent
+# 🇪🇺 EU AI Act Compliance Agent by [legitima.ai](https://legitima.ai/mcp-hackathon) powered by [decode](https://decode.gr/en)
+
+<div align="center">
+  <img src="https://www.legitima.ai/mcp-hackathon.png" alt="Gradio MCP Hackathon - EU AI Act Compliance" width="800"/>
+</div>
 
 > **🎂 Built for the MCP 1st Birthday Hackathon**  
 > **🔗 [Live Demo & Showcase](https://www.legitima.ai/mcp-hackathon)** - See MCP tools and agent capabilities in action!
 
 An interactive AI agent with Gradio UI for navigating EU AI Act compliance requirements, powered by Vercel AI SDK v5 and the EU AI Act MCP Server. This project demonstrates enterprise-grade MCP tool integration with multi-model AI capabilities for regulatory compliance assessment.
+
+## 📑 Table of Contents
+
+- [🎯 Hackathon Submission](#-hackathon-submission)
+- [🏗️ Architecture](#️-architecture)
+- [🔌 MCP Tools Integration](#-mcp-tools-integration)
+- [✨ Features](#-features)
+- [🚀 Getting Started](#-getting-started)
+- [🚀 How to Use in ChatGPT](#-how-to-use-in-chatgpt)
+- [📖 Usage Examples](#-usage-examples)
+- [🔧 Configuration](#-configuration)
+- [🛠️ Development](#️-development)
+- [📚 API Reference](#-api-reference)
+- [🧪 Testing](#-testing)
+- [🎯 Tech Stack](#-tech-stack)
 
 ## 🎯 Hackathon Submission
 
@@ -184,26 +203,6 @@ This agent leverages a **custom MCP server** (`@eu-ai-act/mcp-server`) that prov
 
 > ⚠️ **Important:** GPT-OSS may take up to **60 seconds** to start responding due to Modal.com's cold start behavior. For **faster responses and better precision**, select another model (Claude, GPT-5, Gemini, or Grok) and provide your API key in the Gradio UI.
 
-**Quick Setup (5 minutes):**
-
-1. **Create a free account** at [modal.com](https://modal.com) (first **$30/month FREE**)
-2. **Deploy the model:**
-   ```bash
-   cd modal
-   pip install modal
-   modal setup  # Follow prompts to create account
-   modal deploy gpt_oss_inference.py
-   ```
-3. **Copy the endpoint URL** (e.g., `https://your-workspace--gpt-oss-vllm-inference-serve.modal.run`)
-4. **Set environment variable** or paste in Gradio UI:
-   ```bash
-   export MODAL_ENDPOINT_URL="https://your-workspace--gpt-oss-vllm-inference-serve.modal.run"
-   ```
-
-**That's it!** The agent will use GPT-OSS by default. No API keys needed! 🎉
-
-**Alternative:** Use a shared endpoint if your team has one available.
-
 See [modal/README.md](../../modal/README.md) for detailed deployment instructions and GPU options.
 
 ### Installation
@@ -317,21 +316,6 @@ Once connected, you'll have access to all three MCP tools:
 - **`assess_compliance`** ⚖️ - AI-powered compliance assessment
 
 ChatGPT will automatically call these tools based on your conversation context!
-
-### Configuration
-
-The ChatGPT app runs on a separate port (default: `7861`) to avoid conflicts with the main Gradio UI:
-
-```bash
-# Customize port and server name via environment variables
-export CHATGPT_APP_SERVER_PORT=7861
-export CHATGPT_APP_SERVER_NAME=0.0.0.0
-
-# Run the app
-uv run src/chatgpt_app.py
-```
-
-> 💡 **Note:** The `share=True` parameter is required to create a public URL that ChatGPT can access. This uses Gradio's free sharing service.
 
 ## 📖 Usage Examples
 

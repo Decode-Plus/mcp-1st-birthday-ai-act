@@ -46,7 +46,7 @@ echo "✅ Updated PUBLIC_URL in Dockerfile"
 # Create a simple README for this space
 cat > README.md << 'EOF'
 ---
-title: EU AI Act - ChatGPT MCP Server
+title: EU AI Act - ChatGPT MCP Server by legitima.ai
 emoji: ⚖️
 colorFrom: blue
 colorTo: indigo
@@ -58,7 +58,11 @@ tags:
 short_description: MCP Server for ChatGPT Apps - EU AI Act Compliance Tools
 ---
 
-# 🇪🇺 EU AI Act - ChatGPT MCP Server
+# 🇪🇺 EU AI Act - ChatGPT MCP Server by [legitima.ai](https://legitima.ai/mcp-hackathon) powered by [decode](https://decode.gr/en)
+
+<div align="center">
+  <img src="https://www.legitima.ai/mcp-hackathon.png" alt="Gradio MCP Hackathon - EU AI Act Compliance" width="800"/>
+</div>
 
 This is the **MCP Server** for integrating EU AI Act compliance tools with **ChatGPT Desktop**.
 

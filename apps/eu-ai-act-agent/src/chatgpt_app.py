@@ -940,7 +940,7 @@ with gr.Blocks(
         <div style="text-align: center; padding: 20px 0; background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%); border-radius: 12px; color: white; margin-bottom: 20px;">
             <h1 style="margin: 0; font-size: 2em;">🇪🇺 EU AI Act Compliance</h1>
             <p style="margin: 10px 0 0 0; opacity: 0.9;">ChatGPT App powered by Gradio MCP</p>
-            <p style="margin: 5px 0 0 0; font-size: 0.85em; opacity: 0.7;">by <a href="https://www.legitima.ai" target="_blank" style="color: #90CAF9;">Legitima.ai</a></p>
+            <p style="margin: 5px 0 0 0; font-size: 0.85em; opacity: 0.7;">by <a href="https://www.legitima.ai/mcp-hackathon" target="_blank" style="color: #90CAF9;">Legitima.ai</a></p>
             {_env_info}
         </div>
     """)
@@ -1084,7 +1084,8 @@ def save_mcp_url(url: str):
 
 if __name__ == "__main__":
     is_production = bool(PUBLIC_URL)
-    server_port = int(os.getenv("GRADIO_SERVER_PORT", os.getenv("CHATGPT_APP_SERVER_PORT", "7860")))
+    # ChatGPT MCP app runs on 7861 by default (separate from main Gradio UI on 7860)
+    server_port = int(os.getenv("CHATGPT_APP_SERVER_PORT", "7861"))
     use_share = os.getenv("GRADIO_SHARE", "false").lower() == "true"
     
     print("\n" + "=" * 70)
@@ -1119,7 +1120,7 @@ if __name__ == "__main__":
     print("\n🚀 Starting Gradio MCP Server...")
     print("=" * 70 + "\n")
     
-    # Launch the MCP server
+    # Launch the MCP server on port 7860 (standalone) or 7861 (local dev with gradio_app)
     demo.launch(
         server_name=os.getenv("CHATGPT_APP_SERVER_NAME", "0.0.0.0"),
         server_port=server_port,

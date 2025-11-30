@@ -778,12 +778,26 @@ def get_example_queries() -> List[List[str]]:
         ["What's the timeline for EU AI Act enforcement?"],
     ]
 
-# Create Gradio interface  
+# Default browser state for persistent storage
+DEFAULT_BROWSER_STATE = {
+    "api_keys": {
+        "tavily": "",
+        "anthropic": "",
+        "google": "",
+        "openai": "",
+        "xai": ""
+    },
+    "model": "gpt-oss"
+}
+
+# Create Gradio interface
 with gr.Blocks(
     title="🇪🇺 EU AI Act Compliance Agent",
 ) as demo:
+    # Browser state for persistent storage (persists across page refreshes)
+    browser_state = gr.BrowserState(DEFAULT_BROWSER_STATE)
     
-    # Custom CSS and JavaScript to handle scroll behavior, styling, and secure cookie storage
+    # Custom CSS only - JavaScript is loaded via gr.Blocks(js=...) parameter
     gr.HTML("""
     <style>
     /* Hide Gradio's default footer */
@@ -831,461 +845,6 @@ with gr.Blocks(
         margin-left: 8px;
     }
     </style>
-    
-    <script>
-    // ============================================
-    // Secure Cookie Storage for API Keys
-    // Keys are encoded and expire after 1 day
-    // ============================================
-    
-    const SecureKeyStorage = {
-        // Simple obfuscation key (not military-grade, but prevents casual inspection)
-        _obfKey: 'EU_AI_ACT_2024_MCP',
-        _cookiePrefix: 'euai_',
-        _expirationDays: 1,
-        
-        // XOR-based encoding with base64
-        _encode: function(str) {
-            if (!str) return '';
-            let encoded = '';
-            for (let i = 0; i < str.length; i++) {
-                encoded += String.fromCharCode(
-                    str.charCodeAt(i) ^ this._obfKey.charCodeAt(i % this._obfKey.length)
-                );
-            }
-            return btoa(encoded);
-        },
-        
-        // Decode from base64 + XOR
-        _decode: function(encoded) {
-            if (!encoded) return '';
-            try {
-                const decoded = atob(encoded);
-                let result = '';
-                for (let i = 0; i < decoded.length; i++) {
-                    result += String.fromCharCode(
-                        decoded.charCodeAt(i) ^ this._obfKey.charCodeAt(i % this._obfKey.length)
-                    );
-                }
-                return result;
-            } catch (e) {
-                console.warn('[SecureKeyStorage] Failed to decode:', e);
-                return '';
-            }
-        },
-        
-        // Set a cookie with 1-day expiration and security flags
-        _setCookie: function(name, value) {
-            const expires = new Date();
-            expires.setTime(expires.getTime() + (this._expirationDays * 24 * 60 * 60 * 1000));
-            
-            // Security flags: SameSite=Strict prevents CSRF, Secure ensures HTTPS only in production
-            const isSecure = window.location.protocol === 'https:';
-            const secureFlag = isSecure ? '; Secure' : '';
-            
-            document.cookie = `${this._cookiePrefix}${name}=${encodeURIComponent(value)}; ` +
-                `expires=${expires.toUTCString()}; ` +
-                `path=/; SameSite=Strict${secureFlag}`;
-        },
-        
-        // Get a cookie value
-        _getCookie: function(name) {
-            const fullName = this._cookiePrefix + name;
-            const cookies = document.cookie.split(';');
-            for (let cookie of cookies) {
-                const [cookieName, cookieValue] = cookie.trim().split('=');
-                if (cookieName === fullName) {
-                    return decodeURIComponent(cookieValue || '');
-                }
-            }
-            return '';
-        },
-        
-        // Delete a cookie
-        _deleteCookie: function(name) {
-            document.cookie = `${this._cookiePrefix}${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Strict`;
-        },
-        
-        // Store an API key (encoded)
-        storeKey: function(keyName, keyValue) {
-            if (!keyValue || keyValue.length < 10) {
-                this._deleteCookie(keyName);
-                return false;
-            }
-            const encoded = this._encode(keyValue);
-            this._setCookie(keyName, encoded);
-            console.log(`[SecureKeyStorage] Stored ${keyName} (expires in ${this._expirationDays} day)`);
-            return true;
-        },
-        
-        // Retrieve an API key (decoded)
-        getKey: function(keyName) {
-            const encoded = this._getCookie(keyName);
-            if (!encoded) return '';
-            return this._decode(encoded);
-        },
-        
-        // Store all keys at once
-        storeAllKeys: function(keys) {
-            const stored = [];
-            if (keys.tavily) { this.storeKey('tavily', keys.tavily); stored.push('Tavily'); }
-            if (keys.anthropic) { this.storeKey('anthropic', keys.anthropic); stored.push('Anthropic'); }
-            if (keys.google) { this.storeKey('google', keys.google); stored.push('Google'); }
-            if (keys.openai) { this.storeKey('openai', keys.openai); stored.push('OpenAI'); }
-            if (keys.xai) { this.storeKey('xai', keys.xai); stored.push('xAI'); }
-            return stored;
-        },
-        
-        // Get all stored keys
-        getAllKeys: function() {
-            return {
-                tavily: this.getKey('tavily'),
-                anthropic: this.getKey('anthropic'),
-                google: this.getKey('google'),
-                openai: this.getKey('openai'),
-                xai: this.getKey('xai')
-            };
-        },
-        
-        // Check if any keys are stored
-        hasStoredKeys: function() {
-            const keys = this.getAllKeys();
-            return !!(keys.tavily || keys.anthropic || keys.google || keys.openai || keys.xai);
-        },
-        
-        // Clear all stored keys
-        clearAllKeys: function() {
-            this._deleteCookie('tavily');
-            this._deleteCookie('anthropic');
-            this._deleteCookie('google');
-            this._deleteCookie('openai');
-            this._deleteCookie('xai');
-            console.log('[SecureKeyStorage] All keys cleared');
-        }
-    };
-    
-    // Make it globally accessible
-    window.SecureKeyStorage = SecureKeyStorage;
-    
-    // Function to populate key fields from cookies on page load
-    function populateKeysFromCookies() {
-        const keys = SecureKeyStorage.getAllKeys();
-        let populated = [];
-        
-        // Find Gradio input elements by their element IDs or labels
-        // Gradio 4.x uses specific data attributes and structure
-        setTimeout(() => {
-            // Try to find inputs by elem_id first (more reliable)
-            const tavilyInput = document.querySelector('#tavily_key_input input[type="password"]');
-            const anthropicInput = document.querySelector('#anthropic_key_input input[type="password"]');
-            const googleInput = document.querySelector('#google_key_input input[type="password"]');
-            const openaiInput = document.querySelector('#openai_key_input input[type="password"]');
-            const xaiInput = document.querySelector('#xai_key_input input[type="password"]');
-            
-            // Populate from cookies
-            if (tavilyInput && keys.tavily) {
-                tavilyInput.value = keys.tavily;
-                tavilyInput.dispatchEvent(new Event('input', { bubbles: true }));
-                populated.push('Tavily');
-            }
-            if (anthropicInput && keys.anthropic) {
-                anthropicInput.value = keys.anthropic;
-                anthropicInput.dispatchEvent(new Event('input', { bubbles: true }));
-                populated.push('Anthropic');
-            }
-            if (googleInput && keys.google) {
-                googleInput.value = keys.google;
-                googleInput.dispatchEvent(new Event('input', { bubbles: true }));
-                populated.push('Google');
-            }
-            if (openaiInput && keys.openai) {
-                openaiInput.value = keys.openai;
-                openaiInput.dispatchEvent(new Event('input', { bubbles: true }));
-                populated.push('OpenAI');
-            }
-            if (xaiInput && keys.xai) {
-                xaiInput.value = keys.xai;
-                xaiInput.dispatchEvent(new Event('input', { bubbles: true }));
-                populated.push('xAI');
-            }
-            
-            // Fallback: try finding by label text if elem_id didn't work
-            if (populated.length === 0) {
-                const inputs = document.querySelectorAll('input[type="password"]');
-                inputs.forEach(input => {
-                    const container = input.closest('.gradio-textbox, .gr-textbox, [class*="textbox"]');
-                    if (!container) return;
-                    
-                    const label = container.querySelector('label, span.label-text, [data-testid="label"]');
-                    const labelText = label ? label.textContent.toLowerCase() : '';
-                    
-                    if (labelText.includes('tavily') && keys.tavily && !input.value) {
-                        input.value = keys.tavily;
-                        input.dispatchEvent(new Event('input', { bubbles: true }));
-                        populated.push('Tavily');
-                    } else if (labelText.includes('anthropic') && keys.anthropic && !input.value) {
-                        input.value = keys.anthropic;
-                        input.dispatchEvent(new Event('input', { bubbles: true }));
-                        populated.push('Anthropic');
-                    } else if (labelText.includes('google') && keys.google && !input.value) {
-                        input.value = keys.google;
-                        input.dispatchEvent(new Event('input', { bubbles: true }));
-                        populated.push('Google');
-                    } else if (labelText.includes('openai') && keys.openai && !input.value) {
-                        input.value = keys.openai;
-                        input.dispatchEvent(new Event('input', { bubbles: true }));
-                        populated.push('OpenAI');
-                    } else if (labelText.includes('xai') && keys.xai && !input.value) {
-                        input.value = keys.xai;
-                        input.dispatchEvent(new Event('input', { bubbles: true }));
-                        populated.push('xAI');
-                    }
-                });
-            }
-            
-            if (populated.length > 0) {
-                console.log('[SecureKeyStorage] Loaded keys from cookies:', populated.join(', '));
-                
-                // Show a notification that keys were loaded
-                showKeysLoadedNotification(populated);
-                
-                // Auto-click the save button to register keys with the backend
-                setTimeout(() => {
-                    const saveBtn = Array.from(document.querySelectorAll('button')).find(
-                        btn => btn.textContent.includes('Save Keys')
-                    );
-                    if (saveBtn) {
-                        saveBtn.click();
-                        console.log('[SecureKeyStorage] Auto-saved loaded keys to session');
-                    }
-                }, 500);
-            }
-        }, 1500); // Wait for Gradio to fully render
-    }
-    
-    // Show notification when keys are loaded from cookies
-    function showKeysLoadedNotification(keyNames) {
-        // Find the keys status markdown element
-        const statusElements = document.querySelectorAll('.prose, [class*="markdown"]');
-        
-        // Create a temporary notification
-        const notification = document.createElement('div');
-        notification.innerHTML = `
-            <div style="background: #d4edda; border: 1px solid #c3e6cb; color: #155724; 
-                        padding: 10px 15px; border-radius: 6px; margin: 10px 0;
-                        display: flex; align-items: center; gap: 8px;">
-                <span style="font-size: 1.2em;">🔐</span>
-                <div>
-                    <strong>Keys restored from secure storage</strong><br>
-                    <small>Loaded: ${keyNames.join(', ')} (expires in 24h)</small>
-                </div>
-            </div>
-        `;
-        
-        // Insert near the API Keys accordion
-        const accordion = document.querySelector('[class*="accordion"]');
-        if (accordion) {
-            accordion.insertAdjacentElement('afterend', notification);
-            
-            // Auto-hide after 5 seconds
-            setTimeout(() => {
-                notification.style.transition = 'opacity 0.5s';
-                notification.style.opacity = '0';
-                setTimeout(() => notification.remove(), 500);
-            }, 5000);
-        }
-    }
-    
-    // Initialize on page load
-    document.addEventListener('DOMContentLoaded', function() {
-        if (SecureKeyStorage.hasStoredKeys()) {
-            populateKeysFromCookies();
-        }
-    });
-    
-    // Also try on window load (Gradio might not be ready on DOMContentLoaded)
-    window.addEventListener('load', function() {
-        if (SecureKeyStorage.hasStoredKeys()) {
-            setTimeout(populateKeysFromCookies, 500);
-        }
-    });
-    // Disable Gradio's auto-scroll when user manually scrolls
-    (function() {
-        let userHasScrolled = false;
-        let chatContainer = null;
-        let scrollIndicator = null;
-        let isStreaming = false;
-        
-        function findChatContainer() {
-            // Find the chat messages container (Gradio uses different selectors)
-            const selectors = [
-                '.chatbot .messages-wrapper',
-                '.chatbot [data-testid="bot"]',
-                '.chatbot .overflow-y-auto',
-                '[data-testid="chatbot"] > div',
-                '.chatbot'
-            ];
-            
-            for (const selector of selectors) {
-                const el = document.querySelector(selector);
-                if (el && el.scrollHeight > el.clientHeight) {
-                    return el;
-                }
-            }
-            
-            // Fallback: find any scrollable element in chatbot
-            const chatbot = document.querySelector('.chatbot');
-            if (chatbot) {
-                const scrollable = chatbot.querySelector('[style*="overflow"]') || 
-                                   chatbot.querySelector('.overflow-y-auto') ||
-                                   Array.from(chatbot.querySelectorAll('*')).find(el => 
-                                       el.scrollHeight > el.clientHeight && 
-                                       getComputedStyle(el).overflowY !== 'visible'
-                                   );
-                return scrollable || chatbot;
-            }
-            return null;
-        }
-        
-        function isNearBottom(container) {
-            if (!container) return true;
-            const threshold = 100; // pixels from bottom
-            return container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
-        }
-        
-        function scrollToBottom(container) {
-            if (container) {
-                container.scrollTop = container.scrollHeight;
-            }
-        }
-        
-        function createScrollIndicator(container) {
-            if (scrollIndicator) return scrollIndicator;
-            
-            scrollIndicator = document.createElement('div');
-            scrollIndicator.className = 'scroll-indicator';
-            scrollIndicator.innerHTML = '⬇️ New content below - click to scroll';
-            scrollIndicator.onclick = function() {
-                userHasScrolled = false;
-                scrollToBottom(container);
-                scrollIndicator.style.display = 'none';
-            };
-            
-            // Position relative to chat container
-            const chatbot = document.querySelector('.chatbot');
-            if (chatbot) {
-                chatbot.style.position = 'relative';
-                chatbot.appendChild(scrollIndicator);
-            }
-            
-            return scrollIndicator;
-        }
-        
-        function handleScroll(e) {
-            const container = e.target;
-            
-            // If user scrolls up (not near bottom), mark as user-scrolled
-            if (!isNearBottom(container)) {
-                userHasScrolled = true;
-                if (scrollIndicator && isStreaming) {
-                    scrollIndicator.style.display = 'block';
-                }
-            } else {
-                // User scrolled back to bottom
-                userHasScrolled = false;
-                if (scrollIndicator) {
-                    scrollIndicator.style.display = 'none';
-                }
-            }
-        }
-        
-        function setupScrollHandling() {
-            chatContainer = findChatContainer();
-            if (!chatContainer) {
-                // Retry after a short delay if container not found yet
-                setTimeout(setupScrollHandling, 500);
-                return;
-            }
-            
-            // Remove any existing listeners
-            chatContainer.removeEventListener('scroll', handleScroll);
-            
-            // Add scroll listener
-            chatContainer.addEventListener('scroll', handleScroll, { passive: true });
-            
-            // Create scroll indicator
-            createScrollIndicator(chatContainer);
-            
-            // Override Gradio's auto-scroll behavior using MutationObserver
-            const observer = new MutationObserver(function(mutations) {
-                // Content changed - this is likely streaming
-                isStreaming = true;
-                
-                // Only auto-scroll if user hasn't manually scrolled
-                if (!userHasScrolled) {
-                    scrollToBottom(chatContainer);
-                } else if (scrollIndicator) {
-                    scrollIndicator.style.display = 'block';
-                }
-            });
-            
-            observer.observe(chatContainer, {
-                childList: true,
-                subtree: true,
-                characterData: true
-            });
-            
-            console.log('[Scroll] Auto-scroll handler initialized');
-        }
-        
-        // Reset scroll state when a new message is sent
-        function resetScrollState() {
-            userHasScrolled = false;
-            isStreaming = true;
-            if (scrollIndicator) {
-                scrollIndicator.style.display = 'none';
-            }
-        }
-        
-        // Listen for form submissions to reset scroll state
-        document.addEventListener('click', function(e) {
-            if (e.target.matches('button[type="submit"], button.primary')) {
-                resetScrollState();
-            }
-        });
-        
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                const activeEl = document.activeElement;
-                if (activeEl && activeEl.tagName === 'TEXTAREA') {
-                    resetScrollState();
-                }
-            }
-        });
-        
-        // Mark streaming as complete when stop button is clicked or response ends
-        document.addEventListener('click', function(e) {
-            if (e.target.matches('button.stop, button[variant="stop"]')) {
-                isStreaming = false;
-                if (scrollIndicator) {
-                    scrollIndicator.style.display = 'none';
-                }
-            }
-        });
-        
-        // Initialize when DOM is ready
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', setupScrollHandling);
-        } else {
-            setupScrollHandling();
-        }
-        
-        // Re-initialize on Gradio component updates
-        window.addEventListener('load', function() {
-            setTimeout(setupScrollHandling, 1000);
-        });
-    })();
-    </script>
     """)
     
     # Header - use PUBLIC_URL for production links
@@ -1329,7 +888,7 @@ with gr.Blocks(
     gr.HTML(f"""
         <div style="text-align: center; padding: 20px 0;">
             <h1 style="margin: 0; font-size: 2em;">🇪🇺 EU AI Act Compliance Agent</h1>
-            <p style="margin: 10px 0 0 0; opacity: 0.8;">by <a href="https://www.legitima.ai" target="_blank" style="color: #4CAF50;">Legitima.ai</a></p>
+            <p style="margin: 10px 0 0 0; opacity: 0.8;">by <a href="https://www.legitima.ai/mcp-hackathon" target="_blank" style="color: #4CAF50;">Legitima.ai</a></p>
             <p style="margin: 5px 0; font-size: 0.9em; opacity: 0.7;">Your intelligent assistant for navigating European AI regulation</p>
             <p style="margin: 10px 0 0 0; font-size: 0.9em;">
                 {chatgpt_section}
@@ -1371,7 +930,8 @@ with gr.Blocks(
                 choices=[(v["name"], k) for k, v in AVAILABLE_MODELS.items()],
                 value=current_model_settings["model"],  # Use current model setting
                 label="AI Model",
-                info="Select the AI model to use. ⚠️ GPT-OSS is FREE but may take up to 60s to start (cold start). For faster responses and better precision, use another model with your API key."
+                info="Select the AI model to use. ⚠️ GPT-OSS is FREE but may take up to 60s to start (cold start). For faster responses and better precision, use another model with your API key.",
+                elem_id="model_dropdown"
             )
             
             # API Key inputs (password fields) - GPT-OSS is FREE, other models require API keys
@@ -1384,7 +944,7 @@ with gr.Blocks(
 
 🔐 Keys are stored securely in encoded cookies and **auto-expire after 24 hours**.
 
-ℹ️ *Tavily is optional - enhances web research for organization & AI systems discovery. When not provided, the AI model will be used for research instead.*""")
+ℹ️ *Tavily is **optional** - enhances web research for organization & AI systems discovery. Falls back to server's `TAVILY_API_KEY` env var if not provided, then to AI model.*""")
                 
                 gr.Markdown("#### 🔍 Research API (Optional)")
                 tavily_key = gr.Textbox(
@@ -1392,7 +952,7 @@ with gr.Blocks(
                     placeholder="tvly-... (optional - enhances web research)",
                     type="password",
                     value="",  # Will be populated from cookies via JS
-                    info="Optional - enhances web research. AI model used as fallback.",
+                    info="Optional - uses server env var fallback, then AI model.",
                     elem_id="tavily_key_input"
                 )
                 
@@ -1585,15 +1145,21 @@ with gr.Blocks(
         
         # Build status message
         status_parts = []
+        
+        # Always show current model
+        model = current_model_settings["model"]
+        model_info = AVAILABLE_MODELS.get(model, {})
+        status_parts.append(f"🤖 **Model:** {model_info.get('name', model)}")
+        
         if saved:
-            status_parts.append(f"✅ Saved: {', '.join(saved)}")
-            status_parts.append("🔐 *Stored in secure cookies (expires in 24h)*")
+            status_parts.append(f"✅ **Keys Saved:** {', '.join(saved)}")
+        
+        status_parts.append("🔐 *Settings stored in secure cookies (expires in 24h)*")
         
         # Check for missing required keys based on selected model
-        model = current_model_settings["model"]
         if model == "gpt-oss":
             # GPT-OSS uses hardcoded Modal endpoint - always available
-            status_parts.append("🆓 *GPT-OSS model is FREE - using hardcoded endpoint!*")
+            status_parts.append("🆓 *GPT-OSS model is FREE - no API key required!*")
         elif model in ["claude-4.5", "claude-opus"] and not current_model_settings["anthropic_api_key"]:
             status_parts.append(f"⚠️ **Anthropic API key required** for {model}")
         elif model == "gemini-3" and not current_model_settings["google_api_key"]:
@@ -1605,10 +1171,7 @@ with gr.Blocks(
         
         # Tavily is optional - just inform user about enhanced features if they have it
         if not current_model_settings["tavily_api_key"]:
-            status_parts.append("ℹ️ *Tavily not set - AI model will be used for web research*")
-        
-        if not status_parts:
-            return "✅ All configured!\n\n🔐 *Stored in secure cookies (expires in 24h)*"
+            status_parts.append("ℹ️ *Tavily not set - will use server env var fallback or AI model*")
         
         return "\n\n".join(status_parts)
     
@@ -1684,7 +1247,7 @@ To use this service, you need to provide your own API keys. The following keys a
 - Select **GPT-OSS 20B** from the model dropdown - it's FREE via Modal.com!
 
 **Optional:**
-- **Tavily**: [tavily.com](https://tavily.com) - For enhanced web research (AI model will be used as fallback)
+- **Tavily**: [tavily.com](https://tavily.com) - For enhanced web research (falls back to server env var, then AI model)
 """
             return False, error_msg
         
@@ -1779,61 +1342,146 @@ To use this service, you need to provide your own API keys. The following keys a
     )
     clear_btn.click(lambda: [], None, chatbot)
     
-    # Model selection handler
-    model_dropdown.change(update_model, [model_dropdown], [keys_status])
+    # Function to update model in browser state
+    def save_model_to_browser_state(model_val, stored_data):
+        """Save model selection to browser state"""
+        if stored_data is None:
+            stored_data = DEFAULT_BROWSER_STATE.copy()
+        new_data = stored_data.copy()
+        new_data["model"] = model_val or "gpt-oss"
+        print(f"[BrowserState] Model changed to: {model_val}")
+        return new_data
     
-    # Save keys handler with JavaScript to store in secure cookies
-    # The _js parameter runs after the Python function completes
+    # Model selection handler - also saves to browser state
+    model_dropdown.change(
+        update_model, 
+        [model_dropdown], 
+        [keys_status]
+    ).then(
+        save_model_to_browser_state,
+        [model_dropdown, browser_state],
+        [browser_state]
+    )
+    
+    # Function to save settings to browser state
+    def save_to_browser_state(tavily_val, anthropic_val, google_val, openai_val, xai_val, model_val, stored_data):
+        """Save API keys and model to browser state (persists across refreshes)"""
+        new_data = {
+            "api_keys": {
+                "tavily": tavily_val or "",
+                "anthropic": anthropic_val or "",
+                "google": google_val or "",
+                "openai": openai_val or "",
+                "xai": xai_val or ""
+            },
+            "model": model_val or "gpt-oss"
+        }
+        print(f"[BrowserState] Saving to browser: model={model_val}, keys={[k for k,v in new_data['api_keys'].items() if v]}")
+        return new_data
+    
+    # Combined save handler - saves to session AND browser state
     save_keys_btn.click(
         save_api_keys, 
         [tavily_key, anthropic_key, google_key, openai_key, xai_key], 
-        [keys_status],
-        js="""
-        (tavily, anthropic, google, openai, xai) => {
-            // Store keys in secure cookies using our SecureKeyStorage
-            if (window.SecureKeyStorage) {
-                const stored = window.SecureKeyStorage.storeAllKeys({
-                    tavily: tavily,
-                    anthropic: anthropic,
-                    google: google,
-                    openai: openai,
-                    xai: xai
-                });
-                if (stored.length > 0) {
-                    console.log('[SecureKeyStorage] Stored to cookies:', stored.join(', '));
-                }
-            }
-            return [tavily, anthropic, google, openai, xai];
-        }
-        """
+        [keys_status]
+    ).then(
+        save_to_browser_state,
+        [tavily_key, anthropic_key, google_key, openai_key, xai_key, model_dropdown, browser_state],
+        [browser_state]
     )
     
-    # Clear keys function - clears both session and cookies
+    # Clear keys function - clears both session and cookies, resets model to default
     def clear_api_keys():
-        """Clear all stored API keys from session and cookies"""
+        """Clear all stored API keys from session and cookies, reset model to default"""
         # Note: modal_endpoint_url is hardcoded, so we don't clear it
         current_model_settings["tavily_api_key"] = ""
         current_model_settings["anthropic_api_key"] = ""
         current_model_settings["google_api_key"] = ""
         current_model_settings["openai_api_key"] = ""
         current_model_settings["xai_api_key"] = ""
-        return "", "", "", "", "", "🗑️ All settings cleared from session and cookies"
+        current_model_settings["model"] = "gpt-oss"  # Reset to default FREE model
+        # Return: tavily, anthropic, google, openai, xai, model_value, status
+        return "", "", "", "", "", "gpt-oss", "🗑️ All settings cleared (model reset to GPT-OSS)"
     
-    # Clear keys handler with JavaScript to clear cookies
+    # Function to clear browser state
+    def clear_browser_state():
+        """Clear all stored data from browser state"""
+        print("[BrowserState] Clearing all stored data")
+        return DEFAULT_BROWSER_STATE
+    
+    # Combined clear handler - clears session AND browser state
     clear_keys_btn.click(
         clear_api_keys,
         [],
-        [tavily_key, anthropic_key, google_key, openai_key, xai_key, keys_status],
-        js="""
-        () => {
-            // Clear keys from secure cookies
-            if (window.SecureKeyStorage) {
-                window.SecureKeyStorage.clearAllKeys();
-                console.log('[SecureKeyStorage] All cookies cleared');
-            }
-            return [];
-        }
+        [tavily_key, anthropic_key, google_key, openai_key, xai_key, model_dropdown, keys_status]
+    ).then(
+        clear_browser_state,
+        [],
+        [browser_state]
+    )
+    
+    # === Load handler: Restore API keys and model from browser storage on page load ===
+    def load_from_browser_state(stored_data):
+        """Load API keys and model from browser storage (runs on page load)
+        
+        Returns: (tavily, anthropic, google, openai, xai, model, status_message)
         """
+        if not stored_data:
+            print("[BrowserState] No stored data found")
+            return "", "", "", "", "", "gpt-oss", "🔧 Ready - configure API keys to get started"
+        
+        api_keys = stored_data.get("api_keys", {})
+        model = stored_data.get("model", "gpt-oss")
+        
+        # Extract individual keys
+        tavily = api_keys.get("tavily", "")
+        anthropic = api_keys.get("anthropic", "")
+        google = api_keys.get("google", "")
+        openai = api_keys.get("openai", "")
+        xai = api_keys.get("xai", "")
+        
+        # Check which keys were loaded
+        loaded_keys = [k for k, v in api_keys.items() if v]
+        
+        if loaded_keys or model != "gpt-oss":
+            print(f"[BrowserState] Restoring: model={model}, keys={loaded_keys}")
+            
+            # Also update the session state
+            current_model_settings["model"] = model
+            if tavily:
+                current_model_settings["tavily_api_key"] = tavily
+            if anthropic:
+                current_model_settings["anthropic_api_key"] = anthropic
+            if google:
+                current_model_settings["google_api_key"] = google
+            if openai:
+                current_model_settings["openai_api_key"] = openai
+            if xai:
+                current_model_settings["xai_api_key"] = xai
+            
+            # Build status message
+            model_info = AVAILABLE_MODELS.get(model, {})
+            status_parts = []
+            status_parts.append(f"🤖 **Model:** {model_info.get('name', model)}")
+            
+            if loaded_keys:
+                status_parts.append(f"🔐 **Restored from browser:** {', '.join(loaded_keys)}")
+            
+            if model == "gpt-oss":
+                status_parts.append("🆓 *GPT-OSS model is FREE - no API key required!*")
+            
+            status = "\n\n".join(status_parts)
+        else:
+            print("[BrowserState] No saved settings to restore")
+            status = "🔧 Ready - configure API keys to get started"
+        
+        return tavily, anthropic, google, openai, xai, model, status
+    
+    # Trigger on page load - restore saved settings from browser storage
+    demo.load(
+        load_from_browser_state,
+        inputs=[browser_state],
+        outputs=[tavily_key, anthropic_key, google_key, openai_key, xai_key, model_dropdown, keys_status]
     )
 
 # Launch the app
