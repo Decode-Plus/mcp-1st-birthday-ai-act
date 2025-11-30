@@ -111,22 +111,34 @@ def discover_organization(organization_name: str, domain: Optional[str] = None, 
     """
     Discover and profile an organization for EU AI Act compliance assessment.
     
-    This tool researches an organization and creates a comprehensive profile including:
-    - Basic organization information (name, sector, size, location)
-    - Contact information (email, phone, website)
-    - Regulatory context and compliance deadlines
-    - AI maturity level assessment
-    - Certifications and compliance status
+    Implements EU AI Act Article 16 (Provider Obligations), Article 22 (Authorized Representatives),
+    and Article 49 (Registration Requirements). Uses Tavily AI-powered research to discover
+    organization details and regulatory context. Falls back to AI model when Tavily is not available.
     
-    Based on EU AI Act Articles 16 (Provider Obligations), 22 (Authorized Representatives), and 49 (Registration Requirements).
+    This tool researches an organization and creates a comprehensive profile including:
+    - Basic organization information (name, sector, size, location, jurisdiction)
+    - Contact information (email, phone, website) and branding
+    - Regulatory context and compliance deadlines per EU AI Act timeline
+    - AI maturity level assessment (Nascent, Developing, Mature, Leader)
+    - Existing certifications (ISO 27001, SOC 2, GDPR) and compliance status
+    - Quality and Risk Management System status
+    - Authorized representative requirements for non-EU organizations
+    
+    Key EU AI Act Deadlines:
+    - February 2, 2025: Prohibited AI practices ban (Article 5)
+    - August 2, 2025: GPAI model obligations (Article 53)
+    - August 2, 2027: Full AI Act enforcement for high-risk systems (Article 113)
     
     Parameters:
-        organization_name (str): Name of the organization to discover (required)
-        domain (str): Organization's domain (e.g., 'ibm.com'). Auto-discovered if not provided.
-        context (str): Additional context about the organization
+        organization_name (str): Name of the organization to discover (required). Examples: 'IBM', 'Microsoft', 'OpenAI'
+        domain (str): Organization's domain (e.g., 'ibm.com'). Auto-discovered from known companies if not provided.
+        context (str): Additional context about the organization (e.g., 'focus on AI products', 'EU subsidiary')
     
     Returns:
-        dict: Organization profile with regulatory context
+        dict: Organization profile with regulatory context including:
+            - organization: name, sector, size, headquarters, contact, branding, aiMaturityLevel
+            - regulatoryContext: applicableFrameworks, complianceDeadlines, certifications
+            - metadata: createdAt, lastUpdated, completenessScore, dataSource
     """
     return call_api_with_timeout(
         "/api/tools/discover_organization",
@@ -155,21 +167,39 @@ def discover_ai_services(
     """
     Discover and classify AI systems within an organization per EU AI Act requirements.
     
-    This tool scans for AI systems and provides comprehensive compliance analysis:
-    - Risk classification per Article 6 and Annex III (Unacceptable, High, Limited, Minimal)
-    - Technical documentation status per Article 11
-    - Conformity assessment requirements per Article 43
-    - Compliance gap analysis with specific Article references
-    - Registration status per Article 49
+    Implements EU AI Act Article 6 (Classification), Article 11 (Technical Documentation),
+    and Annex III (High-Risk AI Systems) requirements. Uses Tavily AI-powered research or
+    falls back to AI model for system discovery and risk classification.
+    
+    EU AI Act Research Integration:
+    - Regulation (EU) 2024/1689, Official Journal L 2024/1689, 12.7.2024
+    - Annex III: High-Risk AI Systems Categories (employment, healthcare, credit, biometric, legal, education)
+    - Article 11: Technical Documentation Requirements (Annex IV)
+    - Article 43: Conformity Assessment Procedures
+    - Article 49: EU Database Registration
+    - Article 50: Transparency Obligations (chatbots, emotion recognition)
+    - Article 72: Post-Market Monitoring Requirements
+    - Article 17: Quality Management System
+    
+    Risk Classification Categories:
+    - Unacceptable Risk (Article 5): Prohibited AI practices (social scoring, manipulation)
+    - High Risk (Annex III): Employment, healthcare, credit scoring, biometric, legal/judicial, education, law enforcement
+    - Limited Risk (Article 50): Transparency obligations for chatbots, deepfakes
+    - Minimal Risk: General purpose AI with no specific obligations
     
     Parameters:
-        organization_context (dict): Organization profile from discover_organization tool (optional)
-        system_names (list): Specific AI system names to discover (optional)
-        scope (str): Scope of discovery: 'all' (default), 'high-risk-only', 'production-only'
-        context (str): Additional context about the systems
+        organization_context (dict): Organization profile from discover_organization tool. Contains name, sector, size, jurisdiction.
+        system_names (list): Specific AI system names to discover (e.g., ['Watson', 'Copilot', 'ChatGPT']). If not provided, discovers all known systems.
+        scope (str): Scope of discovery - 'all' (default), 'high-risk-only', 'production-only'
+        context (str): Additional context about the systems (e.g., 'focus on recruitment AI', 'customer-facing only')
     
     Returns:
-        dict: AI systems discovery results with risk classification
+        dict: AI systems discovery results including:
+            - systems: Array of AISystemProfile with name, description, riskClassification, technicalDetails, complianceStatus
+            - riskSummary: Counts by risk category (unacceptable, high, limited, minimal)
+            - complianceSummary: Gap counts and overall compliance percentage
+            - regulatoryFramework: EU AI Act reference information
+            - complianceDeadlines: Key dates for high-risk and limited-risk systems
     """
     return call_api_with_timeout(
         "/api/tools/discover_ai_services",
@@ -199,33 +229,53 @@ def assess_compliance(
     """
     Assess EU AI Act compliance and generate documentation using AI analysis.
     
-    This tool takes organization and AI services context to produce comprehensive compliance assessment:
-    - Gap analysis against AI Act requirements (Articles 9-15, 16-22, 43-50)
-    - Risk-specific compliance checklists
-    - Draft documentation templates in markdown format
-    - Remediation recommendations with priorities
-    - Overall compliance score (0-100)
+    EU AI Act Compliance Assessment Tool implementing comprehensive gap analysis
+    against Regulation (EU) 2024/1689. Optimized for speed with brief, actionable outputs.
+    
+    High-Risk System Requirements Assessed (Articles 8-15):
+    - Article 9: Risk Management System - continuous process for identifying, analyzing, mitigating risks
+    - Article 10: Data Governance - quality, representativeness, bias detection in training data
+    - Article 11: Technical Documentation (Annex IV) - comprehensive system documentation
+    - Article 12: Record-Keeping - automatic logging of system operation
+    - Article 13: Transparency - clear information to users and deployers
+    - Article 14: Human Oversight - appropriate human intervention mechanisms
+    - Article 15: Accuracy, Robustness, Cybersecurity - performance and security requirements
+    
+    Provider Obligations Assessed (Articles 16-22):
+    - Article 16: Provider obligations for high-risk AI
+    - Article 17: Quality Management System
+    - Article 22: Authorized Representative (for non-EU providers)
+    
+    Conformity Assessment (Articles 43-49):
+    - Article 43: Conformity Assessment Procedures
+    - Article 47: EU Declaration of Conformity
+    - Article 48: CE Marking
+    - Article 49: EU Database Registration
     
     Generates professional documentation templates for:
-    - Risk Management System (Article 9)
-    - Technical Documentation (Article 11, Annex IV)
-    - Conformity Assessment (Article 43)
-    - Transparency Notice (Article 50)
+    - Risk Management System (Article 9) - risk identification, analysis, mitigation, monitoring
+    - Technical Documentation (Article 11, Annex IV) - system description, data governance, performance metrics
+    - Conformity Assessment procedures (Article 43)
+    - Transparency Notice for chatbots (Article 50)
     - Quality Management System (Article 17)
     - Human Oversight Procedure (Article 14)
     - Data Governance Policy (Article 10)
     
-    NOTE: This assessment can take 1-2 minutes with some models. If it times out,
-    try using a faster model or the direct Gradio interface.
+    NOTE: Assessment typically completes in 30-60 seconds. For complex assessments,
+    consider using faster models (claude-4.5, gemini-3) instead of gpt-oss.
     
     Parameters:
-        organization_context (dict): Organization profile from discover_organization tool
-        ai_services_context (dict): AI services discovery results from discover_ai_services tool
-        focus_areas (list): Specific compliance areas to focus on
-        generate_documentation (bool): Whether to generate documentation templates (default: True)
+        organization_context (dict): Organization profile from discover_organization tool. Contains name, sector, size, EU presence.
+        ai_services_context (dict): AI services discovery results from discover_ai_services tool. Contains systems and risk classifications.
+        focus_areas (list): Specific compliance areas to focus on (e.g., ['Article 9', 'Technical Documentation', 'Conformity Assessment'])
+        generate_documentation (bool): Whether to generate documentation templates (default: True). Set to False for faster assessment.
     
     Returns:
-        dict: Compliance assessment with score, gaps, recommendations, and documentation
+        dict: Compliance assessment including:
+            - assessment: overallScore (0-100), riskLevel (CRITICAL/HIGH/MEDIUM/LOW), gaps, recommendations
+            - documentation: riskManagementTemplate, technicalDocumentation (markdown format)
+            - reasoning: Brief explanation of assessment results
+            - metadata: assessmentDate, modelUsed, organizationAssessed, documentationFiles
     """
     return call_api_with_timeout(
         "/api/tools/assess_compliance",
@@ -245,7 +295,19 @@ def assess_compliance(
 
 @gr.mcp.resource("ui://widget/organization.html", mime_type="text/html+skybridge")
 def organization_widget():
-    """Widget for displaying organization discovery results in ChatGPT"""
+    """
+    Widget for displaying organization discovery results in ChatGPT.
+    
+    Renders a rich card UI showing organization profile data including:
+    - Organization name, logo, and sector
+    - Company size (Startup, SME, Enterprise) and headquarters location
+    - EU presence status and AI maturity level
+    - EU AI Act compliance framework badge
+    - Next compliance deadline with countdown
+    
+    Handles loading, error, and timeout states gracefully.
+    Used with discover_organization MCP tool via openai/outputTemplate.
+    """
     return """
     <style>
         * { box-sizing: border-box; }
@@ -488,7 +550,23 @@ def organization_widget():
 
 @gr.mcp.resource("ui://widget/ai-services.html", mime_type="text/html+skybridge")
 def ai_services_widget():
-    """Widget for displaying AI services discovery results in ChatGPT"""
+    """
+    Widget for displaying AI services discovery results in ChatGPT.
+    
+    Renders a comprehensive risk overview dashboard showing:
+    - Risk summary grid: Unacceptable, High, Limited, Minimal risk counts
+    - Color-coded system cards for each discovered AI system
+    - System details: name, purpose, risk score (0-100), conformity status
+    - Visual indicators for compliance requirements
+    
+    Risk categories per EU AI Act:
+    - Unacceptable (red): Article 5 prohibited practices
+    - High (orange): Annex III systems requiring conformity assessment
+    - Limited (yellow): Article 50 transparency obligations
+    - Minimal (green): No specific obligations
+    
+    Used with discover_ai_services MCP tool via openai/outputTemplate.
+    """
     return """
     <style>
         * { box-sizing: border-box; }
@@ -713,7 +791,26 @@ def ai_services_widget():
 
 @gr.mcp.resource("ui://widget/compliance.html", mime_type="text/html+skybridge")
 def compliance_widget():
-    """Widget for displaying compliance assessment results in ChatGPT"""
+    """
+    Widget for displaying EU AI Act compliance assessment results in ChatGPT.
+    
+    Renders an interactive compliance dashboard showing:
+    - Animated score ring: Overall compliance score (0-100) with color gradient
+    - Risk level badge: CRITICAL, HIGH, MEDIUM, or LOW
+    - Stats grid: Compliance gaps count and recommendations count
+    - Priority gaps section: Top 3 gaps with severity and Article references
+    - Recommendations section: Top 3 prioritized action items
+    - Action button: Re-run full assessment with documentation generation
+    
+    Score color coding:
+    - Green (80+): Good compliance posture
+    - Yellow (60-79): Moderate gaps to address
+    - Orange (40-59): Significant compliance work needed
+    - Red (<40): Critical compliance issues
+    
+    Used with assess_compliance MCP tool via openai/outputTemplate.
+    Includes window.openai.callTool() for interactive re-assessment.
+    """
     return """
     <style>
         * { box-sizing: border-box; }
@@ -1184,17 +1281,59 @@ with gr.Blocks(
         Built for the **MCP 1st Birthday Hackathon** 🎂
         """)
     
-    # Event handlers
+    # Event handlers for Gradio UI testing
     def run_discover_org(name, domain, context):
+        """
+        Discover organization profile for EU AI Act compliance.
+        
+        Researches an organization using Tavily AI search or AI model fallback to create
+        a comprehensive profile including sector, size, EU presence, headquarters,
+        certifications, and regulatory context per EU AI Act Articles 16, 22, and 49.
+        
+        Parameters:
+            name (str): Organization name to discover (e.g., 'IBM', 'Microsoft', 'OpenAI')
+            domain (str): Organization's domain (e.g., 'ibm.com'). Auto-discovered if empty.
+            context (str): Additional context about the organization
+        
+        Returns:
+            dict: Organization profile with regulatory context and compliance deadlines
+        """
         if not name:
             return {"error": "Please enter an organization name"}
         return discover_organization(name, domain or None, context or None)
     
     def run_discover_ai(systems, scope):
+        """
+        Discover and classify AI systems per EU AI Act Annex III risk categories.
+        
+        Scans for AI systems and classifies them according to EU AI Act risk tiers:
+        Unacceptable (Article 5), High (Annex III), Limited (Article 50), or Minimal.
+        Analyzes compliance gaps and conformity assessment requirements.
+        
+        Parameters:
+            systems (str): Comma-separated AI system names to discover (e.g., 'Watson, Copilot')
+            scope (str): Discovery scope - 'all', 'high-risk-only', or 'production-only'
+        
+        Returns:
+            dict: AI systems with risk classifications, compliance gaps, and deadlines
+        """
         system_names = [s.strip() for s in systems.split(",")] if systems else None
         return discover_ai_services(None, system_names, scope, None)
     
     def run_assess(gen_docs):
+        """
+        Assess EU AI Act compliance and generate documentation templates.
+        
+        Performs comprehensive compliance gap analysis against EU AI Act requirements
+        (Articles 9-15, 16-22, 43-50) and generates professional documentation
+        templates for Risk Management, Technical Documentation, and Conformity Assessment.
+        
+        Parameters:
+            gen_docs (bool): Whether to generate documentation templates (Article 9, 11, 43)
+        
+        Returns:
+            dict: Compliance score (0-100), risk level, gaps, recommendations, and documentation
+        """
         return assess_compliance(None, None, None, gen_docs)
     
     discover_btn.click(run_discover_org, [org_name, org_domain, org_context], org_result)

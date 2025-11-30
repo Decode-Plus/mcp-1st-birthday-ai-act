@@ -32,18 +32,20 @@ An interactive AI agent with Gradio UI for navigating EU AI Act compliance requi
 
 ## 📑 Table of Contents
 
-- [🎯 Hackathon Submission](#-hackathon-submission)
-- [🏗️ Architecture](#️-architecture)
-- [🔌 MCP Tools Integration](#-mcp-tools-integration)
-- [✨ Features](#-features)
-- [🚀 Getting Started](#-getting-started)
-- [🚀 How to Use in ChatGPT](#-how-to-use-in-chatgpt)
-- [📖 Usage Examples](#-usage-examples)
-- [🔧 Configuration](#-configuration)
-- [🛠️ Development](#️-development)
-- [📚 API Reference](#-api-reference)
-- [🧪 Testing](#-testing)
-- [🎯 Tech Stack](#-tech-stack)
+- [🎯 Hackathon Submission](#hackathon-submission)
+- [🏗️ Architecture](#architecture)
+- [🔌 MCP Tools Integration](#mcp-tools-integration)
+- [✨ Features](#features)
+- [🚀 Getting Started](#getting-started)
+- [🚀 How to Use in ChatGPT](#how-to-use-in-chatgpt)
+- [📖 Usage Examples](#usage-examples)
+- [🔧 Configuration](#configuration)
+- [🛠️ Development](#development)
+- [📚 API Reference](#api-reference)
+- [🧪 Testing](#testing)
+- [🎯 Tech Stack](#tech-stack)
+
+<a id="hackathon-submission"></a>
 
 ## 🎯 Hackathon Submission
 
@@ -62,6 +64,8 @@ This submission showcases:
 **📱 Social Media:** [LinkedIn Post 1](https://www.linkedin.com/posts/iordanis-sarafidis_mcp-1st-birthday-mcp-1st-birthday-activity-7400132272282144768-ZIir?utm_source=share&utm_medium=member_desktop&rcm=ACoAAB0ARLABGvUO6Q--hJP0cDG7h0LZT0-roLs)
 
 [LinkedIn Post 2](https://www.linkedin.com/posts/billdrosatos_mcp-1st-birthday-mcp-1st-birthday-activity-7400135422502252544-C5BS?utm_source=share&utm_medium=member_desktop&rcm=ACoAAB0ARLABGvUO6Q--hJP0cDG7h0LZT0-roLs)
+
+<a id="architecture"></a>
 
 ## 🏗️ Architecture
 
@@ -109,6 +113,8 @@ This submission showcases:
 └─────────────────────────────────────────────────────────┘
 ```
 
+<a id="mcp-tools-integration"></a>
+
 ### 🔌 MCP Tools Integration
 
 This agent leverages a **custom MCP server** (`@eu-ai-act/mcp-server`) that provides three specialized tools for EU AI Act compliance:
@@ -146,7 +152,9 @@ This agent leverages a **custom MCP server** (`@eu-ai-act/mcp-server`) that prov
 
 **📚 Full MCP Tools Documentation**: See [`packages/eu-ai-act-mcp/README.md`](../../packages/eu-ai-act-mcp/README.md) for complete tool schemas, input/output formats, and usage examples.
 
-**💬 Use in ChatGPT**: The MCP server is deployed and ready to use as a ChatGPT App connector at [https://mcp-1st-birthday-eu-ai-act-chatgpt-mcp.hf.space/](https://mcp-1st-birthday-eu-ai-act-chatgpt-mcp.hf.space/) - see [How to Use in ChatGPT](#-how-to-use-in-chatgpt) section below for instructions.
+**💬 Use in ChatGPT**: The MCP server is deployed and ready to use as a ChatGPT App connector at [https://mcp-1st-birthday-eu-ai-act-chatgpt-mcp.hf.space/](https://mcp-1st-birthday-eu-ai-act-chatgpt-mcp.hf.space/) - see [How to Use in ChatGPT](#how-to-use-in-chatgpt) section below for instructions.
+
+<a id="features"></a>
 
 ## ✨ Features
 
@@ -172,6 +180,8 @@ This agent leverages a **custom MCP server** (`@eu-ai-act/mcp-server`) that prov
 - **Document Preview**: View generated compliance documents
 - **Export Options**: Download assessment reports and templates
 - **Multi-language Support**: Available in multiple EU languages
+
+<a id="getting-started"></a>
 
 ## 🚀 Getting Started
 
@@ -264,6 +274,8 @@ uv run src/gradio_app.py
 
 The Gradio UI will be available at `http://localhost:7860` 🎉
 
+<a id="how-to-use-in-chatgpt"></a>
+
 ## 🚀 How to Use in ChatGPT
 
 The MCP server can be deployed as a **ChatGPT App** (connector) to use EU AI Act compliance tools directly in ChatGPT conversations!
@@ -316,6 +328,8 @@ Once connected, you'll have access to all three MCP tools:
 - **`assess_compliance`** ⚖️ - AI-powered compliance assessment
 
 ChatGPT will automatically call these tools based on your conversation context!
+
+<a id="usage-examples"></a>
 
 ## 📖 Usage Examples
 
@@ -371,6 +385,8 @@ Agent: I'll assess your chatbot and generate the required documents...
 >
 > Additional templates (Conformity Assessment, Transparency Notice, Quality Management System, etc.) are **planned but not yet implemented** to optimize API costs and response speed during the hackathon demo.
 
+<a id="configuration"></a>
+
 ## 🔧 Configuration
 
 ### API Server (`src/server.ts`)
@@ -392,6 +408,8 @@ Agent: I'll assess your chatbot and generate the required documents...
 - **Model Selection**: Dropdown to select AI model in real-time
 - **Secure Key Storage**: API keys stored in encrypted browser cookies (24h expiry)
 - **Export**: Supports markdown and PDF export (optional)
+
+<a id="development"></a>
 
 ## 🛠️ Development
 
@@ -421,6 +439,8 @@ pnpm build
 pnpm start
 ```
 
+<a id="api-reference"></a>
+
 ## 📚 API Reference
 
 ### POST `/api/chat`
@@ -441,6 +461,8 @@ data: {"type":"tool_call","tool":"discover_organization"}
 data: {"type":"result","data":{...}}
 ```
 
+<a id="testing"></a>
+
 ## 🧪 Testing
 
 Test the agent with sample queries:
@@ -449,6 +471,8 @@ curl -X POST http://localhost:3001/api/chat \
   -H "Content-Type: application/json" \
   -d '{"message":"What is the EU AI Act?"}'
 ```
+
+<a id="tech-stack"></a>
 
 ## 🎯 Tech Stack
 
