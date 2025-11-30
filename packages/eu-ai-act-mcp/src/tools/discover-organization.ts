@@ -564,15 +564,17 @@ async function researchOrganization(
   name: string,
   domain?: string,
   context?: string,
-  tavilyApiKey?: string
+  tavilyApiKey?: string,
+  modelName?: string,
+  apiKeys?: ApiKeys
 ): Promise<Partial<OrganizationProfile>> {
-  // Use passed Tavily API key if provided, otherwise fall back to env var
-  const apiKey = tavilyApiKey || process.env.TAVILY_API_KEY;
+  // Use passed Tavily API key if provided
+  const apiKey = tavilyApiKey;
   
   if (!apiKey) {
-    console.warn("⚠️  TAVILY_API_KEY not set, using AI model for organization research");
-    // Use AI model fallback instead of mock data
-    return researchOrganizationWithAI(name, domain, context);
+    console.warn("⚠️  Tavily API key not provided, using AI model for organization research");
+    // Use AI model fallback - requires model and apiKeys from Gradio settings
+    return researchOrganizationWithAI(name, domain, context, modelName, apiKeys);
   }
   
   try {
@@ -685,7 +687,7 @@ async function researchOrganization(
   } catch (error) {
     console.error("❌ Tavily research error:", error);
     console.warn("⚠️  Falling back to AI model for organization research");
-    return researchOrganizationWithAI(name, domain, context);
+    return researchOrganizationWithAI(name, domain, context, modelName, apiKeys);
   }
 }
 
@@ -782,7 +784,7 @@ Focus on providing accurate information based on your knowledge. If uncertain, m
     const result = await generateText({
       model,
       prompt,
-      temperature: 0.3,
+      temperature: 0.1,
       providerOptions: {
         anthropic: {
           thinking: { type: "enabled", budgetTokens: 1000 },
@@ -1022,26 +1024,35 @@ export async function discoverOrganization(
   const { organizationName, domain, context, model, apiKeys, tavilyApiKey } = input;
 
   // Step 1: Research organization details
-  // Use ONLY passed parameters from Gradio UI - NEVER read from process.env!
-  if (!tavilyApiKey) {
-    throw new Error("Tavily API key is required. Please provide your Tavily API key in the Model Settings panel.");
-  }
-  
+  // Use passed parameters from Gradio UI - fall back to AI model if Tavily not available
   let researchedData: Partial<OrganizationProfile>;
-  try {
-    researchedData = await researchOrganization(
-      organizationName,
-      domain,
-      context,
-      tavilyApiKey
-    );
-  } catch (error) {
-    // If Tavily fails and we have model/API keys, try AI fallback
-    if (model && apiKeys) {
-      console.warn("⚠️  Tavily research failed, using AI model fallback");
-      researchedData = await researchOrganizationWithAI(organizationName, domain, context, model, apiKeys);
-    } else {
-      throw error;
+  
+  if (!tavilyApiKey) {
+    // No Tavily API key - use AI model fallback directly
+    if (!model || !apiKeys) {
+      throw new Error("Either Tavily API key or AI model configuration is required. Please provide API keys in the Model Settings panel.");
+    }
+    console.warn("⚠️  Tavily API key not provided, using AI model for organization research");
+    researchedData = await researchOrganizationWithAI(organizationName, domain, context, model, apiKeys);
+  } else {
+    // Tavily API key provided - try Tavily first, fall back to AI model on error
+    try {
+      researchedData = await researchOrganization(
+        organizationName,
+        domain,
+        context,
+        tavilyApiKey,
+        model,
+        apiKeys
+      );
+    } catch (error) {
+      // If Tavily fails and we have model/API keys, try AI fallback
+      if (model && apiKeys) {
+        console.warn("⚠️  Tavily research failed, using AI model fallback");
+        researchedData = await researchOrganizationWithAI(organizationName, domain, context, model, apiKeys);
+      } else {
+        throw error;
+      }
     }
   }
 

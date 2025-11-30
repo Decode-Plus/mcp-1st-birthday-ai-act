@@ -68,16 +68,18 @@ function parseJSONResponse<T>(content: string): T | null {
 async function scanForAISystems(
   orgContext?: OrganizationProfile,
   systemNames?: string[],
-  tavilyApiKey?: string
+  tavilyApiKey?: string,
+  modelName?: string,
+  apiKeys?: ApiKeys
 ): Promise<AISystemProfile[]> {
-  // Use passed Tavily API key if provided, otherwise fall back to env var
-  const apiKey = tavilyApiKey || process.env.TAVILY_API_KEY;
+  // Use passed Tavily API key if provided
+  const apiKey = tavilyApiKey;
   const organizationName = orgContext?.organization?.name || "Example Corp";
   
   if (!apiKey) {
-    console.warn("⚠️  TAVILY_API_KEY not set, using AI model for AI systems discovery");
-    // Use AI model fallback instead of mock data
-    return discoverAISystemsWithAI(orgContext, systemNames);
+    console.warn("⚠️  Tavily API key not provided, using AI model for AI systems discovery");
+    // Use AI model fallback - requires model and apiKeys from Gradio settings
+    return discoverAISystemsWithAI(orgContext, systemNames, modelName, apiKeys);
   }
 
   try {
@@ -135,7 +137,7 @@ async function scanForAISystems(
   } catch (error) {
     console.error("❌ Tavily research error:", error);
     console.warn("⚠️  Falling back to AI model for AI systems discovery");
-    return discoverAISystemsWithAI(orgContext, systemNames);
+    return discoverAISystemsWithAI(orgContext, systemNames, modelName, apiKeys);
   }
 }
 
@@ -1135,21 +1137,28 @@ export async function discoverAIServices(
   console.error(`[discoverAIServices] Starting discovery with: systemNames=${JSON.stringify(systemNames)}, scope=${scope}, context=${context}`);
 
   // Step 1: Scan for AI systems
-  // Use ONLY passed Tavily API key from Gradio UI - NEVER read from process.env!
-  if (!tavilyApiKey) {
-    throw new Error("Tavily API key is required. Please provide your Tavily API key in the Model Settings panel.");
-  }
-  
+  // Use passed parameters from Gradio UI - fall back to AI model if Tavily not available
   let systems: AISystemProfile[];
-  try {
-    systems = await scanForAISystems(organizationContext, systemNames, tavilyApiKey);
-  } catch (error) {
-    // If Tavily fails and we have model/API keys, try AI fallback
-    if (model && apiKeys) {
-      console.warn("⚠️  Tavily research failed, using AI model fallback");
-      systems = await discoverAISystemsWithAI(organizationContext, systemNames, model, apiKeys);
-    } else {
-      throw error;
+  
+  if (!tavilyApiKey) {
+    // No Tavily API key - use AI model fallback directly
+    if (!model || !apiKeys) {
+      throw new Error("Either Tavily API key or AI model configuration is required. Please provide API keys in the Model Settings panel.");
+    }
+    console.warn("⚠️  Tavily API key not provided, using AI model for AI systems discovery");
+    systems = await discoverAISystemsWithAI(organizationContext, systemNames, model, apiKeys);
+  } else {
+    // Tavily API key provided - try Tavily first, fall back to AI model on error
+    try {
+      systems = await scanForAISystems(organizationContext, systemNames, tavilyApiKey, model, apiKeys);
+    } catch (error) {
+      // If Tavily fails and we have model/API keys, try AI fallback
+      if (model && apiKeys) {
+        console.warn("⚠️  Tavily research failed, using AI model fallback");
+        systems = await discoverAISystemsWithAI(organizationContext, systemNames, model, apiKeys);
+      } else {
+        throw error;
+      }
     }
   }
 

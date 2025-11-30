@@ -1384,7 +1384,7 @@ with gr.Blocks(
 
 🔐 Keys are stored securely in encoded cookies and **auto-expire after 24 hours**.
 
-ℹ️ *Tavily is optional - enhances web research but AI model works as fallback.*""")
+ℹ️ *Tavily is optional - enhances web research for organization & AI systems discovery. When not provided, the AI model will be used for research instead.*""")
                 
                 gr.Markdown("#### 🔍 Research API (Optional)")
                 tavily_key = gr.Textbox(
