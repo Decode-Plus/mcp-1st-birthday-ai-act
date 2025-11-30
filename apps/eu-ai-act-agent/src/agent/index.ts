@@ -617,8 +617,15 @@ export function createAgent(config: AgentConfig) {
 						},
 					};
 
+			// For GPT-OSS (vLLM on Modal), we must set explicit maxOutputTokens
+			// The context window is 16k, and the system prompt + tools take ~6-8k tokens
+			// Setting explicit maxOutputTokens prevents vLLM from calculating negative values
+			// 8000 tokens allows for comprehensive compliance reports
+			const maxOutputTokens = isGptOss ? 8000 : undefined;
+
 			const result = streamText({
 				model,
+				maxOutputTokens,
 				messages: [
 					{ role: "system", content: systemPrompt },
 					...params.messages,

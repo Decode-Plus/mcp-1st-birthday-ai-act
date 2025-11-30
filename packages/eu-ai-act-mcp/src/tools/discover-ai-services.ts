@@ -81,7 +81,7 @@ async function scanForAISystems(
 		: process.env.TAVILY_API_KEY
 			? "TAVILY_API_KEY env var"
 			: "none";
-	const organizationName = orgContext?.organization?.name || "Example Corp";
+	const organizationName = orgContext?.organization?.name || "";
 
 	if (!apiKey) {
 		console.warn(
@@ -536,8 +536,7 @@ function createCustomSystemProfile(
 			provider: {
 				name: organizationName,
 				role: "Provider",
-				contact:
-					orgContext?.organization?.contact?.email || "contact@example.com",
+				contact: orgContext?.organization?.contact?.email || "",
 			},
 		},
 		riskClassification,
@@ -586,8 +585,7 @@ function createAISystemProfile(
 			provider: {
 				name: organizationName,
 				role: "Provider",
-				contact:
-					orgContext?.organization?.contact?.email || "contact@example.com",
+				contact: orgContext?.organization?.contact?.email || "",
 			},
 		},
 		riskClassification,
@@ -1050,8 +1048,7 @@ Provide 1-5 AI systems based on what you know about ${organizationName}. If you 
 					provider: {
 						name: organizationName,
 						role: "Provider",
-						contact:
-							orgContext?.organization?.contact?.email || "contact@example.com",
+						contact: orgContext?.organization?.contact?.email || "",
 					},
 				},
 				riskClassification,
@@ -1094,10 +1091,9 @@ function getBasicMockSystems(
 				version: "1.0.0",
 				status: "Production",
 				provider: {
-					name: orgContext?.organization?.name || "Unknown Organization",
+					name: orgContext?.organization?.name || "",
 					role: "Provider",
-					contact:
-						orgContext?.organization?.contact?.email || "contact@example.com",
+					contact: orgContext?.organization?.contact?.email || "",
 				},
 			},
 			riskClassification: {

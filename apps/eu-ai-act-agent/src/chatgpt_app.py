@@ -16,9 +16,12 @@ import gradio as gr
 import requests
 import json
 import os
+import threading
+import time
 from typing import Optional
 from dotenv import load_dotenv
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 
 # Load environment variables from root .env file
 ROOT_DIR = Path(__file__).parent.parent.parent.parent
@@ -27,7 +30,70 @@ load_dotenv(ROOT_DIR / ".env")
 # API Configuration - connects to existing Node.js API server
 API_URL = os.getenv("API_URL", "http://localhost:3001")
 PUBLIC_URL = os.getenv("PUBLIC_URL", "")  # HF Spaces public URL (empty for local dev)
-API_TIMEOUT = 600  # seconds
+API_TIMEOUT = 600  # seconds for internal API calls
+
+# ChatGPT MCP has a timeout of ~60 seconds for tool responses
+# We need to return a response within this window
+CHATGPT_TOOL_TIMEOUT = 55  # seconds - leave 5s buffer for network latency
+
+# Thread pool for async API calls with timeout handling
+_executor = ThreadPoolExecutor(max_workers=4)
+
+
+def call_api_with_timeout(endpoint: str, payload: dict, timeout: int = CHATGPT_TOOL_TIMEOUT) -> dict:
+    """
+    Call API with a timeout, returning partial/placeholder response if it takes too long.
+    This prevents ChatGPT from timing out and closing the connection.
+    """
+    result = {"_pending": True}
+    exception = {"error": None}
+    
+    def make_request():
+        try:
+            response = requests.post(
+                f"{API_URL}{endpoint}",
+                json=payload,
+                timeout=API_TIMEOUT,  # Internal timeout for the actual request
+                stream=False
+            )
+            if response.status_code == 200:
+                result.update(response.json())
+                result["_pending"] = False
+            else:
+                result.update({
+                    "error": True,
+                    "message": f"API returned status {response.status_code}",
+                    "details": response.text[:500],
+                    "_pending": False
+                })
+        except requests.exceptions.ConnectionError:
+            result.update({
+                "error": True,
+                "message": "Cannot connect to API server",
+                "_pending": False
+            })
+        except Exception as e:
+            exception["error"] = str(e)
+            result["_pending"] = False
+    
+    # Start the request in a thread
+    future = _executor.submit(make_request)
+    
+    try:
+        # Wait for the request to complete within timeout
+        future.result(timeout=timeout)
+        if exception["error"]:
+            return {"error": True, "message": exception["error"]}
+        return result
+    except FuturesTimeoutError:
+        # Request is still running but we need to return something to ChatGPT
+        # Return a "processing" response that the widget can handle
+        return {
+            "status": "processing",
+            "message": "🕐 Analysis in progress. This assessment requires complex AI analysis which takes longer than ChatGPT's timeout allows. Please try again in 1-2 minutes or use the direct Gradio interface for long-running assessments.",
+            "tip": "For faster results, try using a faster model (claude-4.5, gemini-3) instead of gpt-oss.",
+            "_timeout": True
+        }
 
 
 # ============================================================================
@@ -62,36 +128,15 @@ def discover_organization(organization_name: str, domain: Optional[str] = None, 
     Returns:
         dict: Organization profile with regulatory context
     """
-    try:
-        # Call the existing Node.js API endpoint
-        response = requests.post(
-            f"{API_URL}/api/tools/discover_organization",
-            json={
-                "organizationName": organization_name,
-                "domain": domain,
-                "context": context
-            },
-            timeout=API_TIMEOUT
-        )
-        
-        if response.status_code == 200:
-            return response.json()
-        else:
-            return {
-                "error": True,
-                "message": f"API returned status {response.status_code}",
-                "details": response.text
-            }
-    except requests.exceptions.ConnectionError:
-        return {
-            "error": True,
-            "message": "Cannot connect to API server. Make sure it's running on http://localhost:3001"
-        }
-    except Exception as e:
-        return {
-            "error": True,
-            "message": str(e)
-        }
+    return call_api_with_timeout(
+        "/api/tools/discover_organization",
+        {
+            "organizationName": organization_name,
+            "domain": domain,
+            "context": context
+        },
+        timeout=CHATGPT_TOOL_TIMEOUT
+    )
 
 
 @gr.mcp.tool(
@@ -126,36 +171,16 @@ def discover_ai_services(
     Returns:
         dict: AI systems discovery results with risk classification
     """
-    try:
-        response = requests.post(
-            f"{API_URL}/api/tools/discover_ai_services",
-            json={
-                "organizationContext": organization_context,
-                "systemNames": system_names,
-                "scope": scope,
-                "context": context
-            },
-            timeout=API_TIMEOUT
-        )
-        
-        if response.status_code == 200:
-            return response.json()
-        else:
-            return {
-                "error": True,
-                "message": f"API returned status {response.status_code}",
-                "details": response.text
-            }
-    except requests.exceptions.ConnectionError:
-        return {
-            "error": True,
-            "message": "Cannot connect to API server. Make sure it's running on http://localhost:3001"
-        }
-    except Exception as e:
-        return {
-            "error": True,
-            "message": str(e)
-        }
+    return call_api_with_timeout(
+        "/api/tools/discover_ai_services",
+        {
+            "organizationContext": organization_context,
+            "systemNames": system_names,
+            "scope": scope,
+            "context": context
+        },
+        timeout=CHATGPT_TOOL_TIMEOUT
+    )
 
 
 @gr.mcp.tool(
@@ -190,6 +215,9 @@ def assess_compliance(
     - Human Oversight Procedure (Article 14)
     - Data Governance Policy (Article 10)
     
+    NOTE: This assessment can take 1-2 minutes with some models. If it times out,
+    try using a faster model or the direct Gradio interface.
+    
     Parameters:
         organization_context (dict): Organization profile from discover_organization tool
         ai_services_context (dict): AI services discovery results from discover_ai_services tool
@@ -199,36 +227,16 @@ def assess_compliance(
     Returns:
         dict: Compliance assessment with score, gaps, recommendations, and documentation
     """
-    try:
-        response = requests.post(
-            f"{API_URL}/api/tools/assess_compliance",
-            json={
-                "organizationContext": organization_context,
-                "aiServicesContext": ai_services_context,
-                "focusAreas": focus_areas,
-                "generateDocumentation": generate_documentation
-            },
-            timeout=API_TIMEOUT
-        )
-        
-        if response.status_code == 200:
-            return response.json()
-        else:
-            return {
-                "error": True,
-                "message": f"API returned status {response.status_code}",
-                "details": response.text
-            }
-    except requests.exceptions.ConnectionError:
-        return {
-            "error": True,
-            "message": "Cannot connect to API server. Make sure it's running on http://localhost:3001"
-        }
-    except Exception as e:
-        return {
-            "error": True,
-            "message": str(e)
-        }
+    return call_api_with_timeout(
+        "/api/tools/assess_compliance",
+        {
+            "organizationContext": organization_context,
+            "aiServicesContext": ai_services_context,
+            "focusAreas": focus_areas,
+            "generateDocumentation": generate_documentation
+        },
+        timeout=CHATGPT_TOOL_TIMEOUT
+    )
 
 
 # ============================================================================
@@ -332,6 +340,38 @@ def organization_widget():
             color: white;
             text-align: center;
         }
+        .processing-card {
+            background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+            border-radius: 16px;
+            padding: 24px;
+            color: white;
+            text-align: center;
+        }
+        .processing-icon {
+            font-size: 48px;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.1); }
+        }
+        .processing-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin: 12px 0 8px 0;
+        }
+        .processing-msg {
+            font-size: 14px;
+            opacity: 0.9;
+            line-height: 1.5;
+        }
+        .tip-box {
+            background: rgba(255,255,255,0.15);
+            border-radius: 8px;
+            padding: 10px;
+            margin-top: 12px;
+            font-size: 12px;
+        }
     </style>
     
     <div id="org-container">
@@ -380,6 +420,18 @@ def organization_widget():
             if (!data || data.error) {
                 document.getElementById('org-container').innerHTML = 
                     '<div class="error-card">❌ ' + (data?.message || 'Failed to load organization') + '</div>';
+                return;
+            }
+            
+            // Handle timeout/processing state
+            if (data.status === 'processing' || data._timeout) {
+                document.getElementById('org-container').innerHTML = 
+                    '<div class="processing-card">' +
+                    '<div class="processing-icon">⏳</div>' +
+                    '<div class="processing-title">Analysis in Progress</div>' +
+                    '<div class="processing-msg">' + (data.message || 'Processing...') + '</div>' +
+                    (data.tip ? '<div class="tip-box">💡 ' + data.tip + '</div>' : '') +
+                    '</div>';
                 return;
             }
             
@@ -526,6 +578,38 @@ def ai_services_widget():
             padding: 40px;
             color: #666;
         }
+        .processing-card {
+            background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+            border-radius: 16px;
+            padding: 24px;
+            color: white;
+            text-align: center;
+        }
+        .processing-icon {
+            font-size: 48px;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.1); }
+        }
+        .processing-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin: 12px 0 8px 0;
+        }
+        .processing-msg {
+            font-size: 14px;
+            opacity: 0.9;
+            line-height: 1.5;
+        }
+        .tip-box {
+            background: rgba(255,255,255,0.15);
+            border-radius: 8px;
+            padding: 10px;
+            margin-top: 12px;
+            font-size: 12px;
+        }
     </style>
     
     <div class="services-container" id="container">
@@ -558,6 +642,18 @@ def ai_services_widget():
             if (!data || data.error) {
                 document.getElementById('systems-list').innerHTML = 
                     '<div class="empty-state">❌ ' + (data?.message || 'No AI systems found') + '</div>';
+                return;
+            }
+            
+            // Handle timeout/processing state
+            if (data.status === 'processing' || data._timeout) {
+                document.getElementById('container').innerHTML = 
+                    '<div class="processing-card">' +
+                    '<div class="processing-icon">⏳</div>' +
+                    '<div class="processing-title">Analysis in Progress</div>' +
+                    '<div class="processing-msg">' + (data.message || 'Processing...') + '</div>' +
+                    (data.tip ? '<div class="tip-box">💡 ' + data.tip + '</div>' : '') +
+                    '</div>';
                 return;
             }
             
@@ -750,6 +846,38 @@ def compliance_widget():
             margin-top: 16px;
         }
         .action-btn:hover { background: #1565c0; }
+        .processing-card {
+            background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+            border-radius: 16px;
+            padding: 24px;
+            color: white;
+            text-align: center;
+        }
+        .processing-icon {
+            font-size: 48px;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.1); }
+        }
+        .processing-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin: 12px 0 8px 0;
+        }
+        .processing-msg {
+            font-size: 14px;
+            opacity: 0.9;
+            line-height: 1.5;
+        }
+        .tip-box {
+            background: rgba(255,255,255,0.15);
+            border-radius: 8px;
+            padding: 10px;
+            margin-top: 12px;
+            font-size: 12px;
+        }
     </style>
     
     <div class="compliance-container" id="container">
@@ -797,6 +925,18 @@ def compliance_widget():
             if (!data || data.error) {
                 document.getElementById('score').textContent = '❌';
                 document.getElementById('gaps-list').innerHTML = '<div style="color:#999;text-align:center;">Error: ' + (data?.message || 'Assessment failed') + '</div>';
+                return;
+            }
+            
+            // Handle timeout/processing state
+            if (data.status === 'processing' || data._timeout) {
+                document.getElementById('container').innerHTML = 
+                    '<div class="processing-card">' +
+                    '<div class="processing-icon">⏳</div>' +
+                    '<div class="processing-title">Compliance Assessment in Progress</div>' +
+                    '<div class="processing-msg">' + (data.message || 'Processing...') + '</div>' +
+                    (data.tip ? '<div class="tip-box">💡 ' + data.tip + '</div>' : '') +
+                    '</div>';
                 return;
             }
             
@@ -996,20 +1136,20 @@ with gr.Blocks(
         gr.Markdown("### MCP Resource Widgets (HTML/JS/CSS)")
         gr.Markdown("These widgets are displayed in ChatGPT when tools are called.")
         
-        with gr.Accordion("Organization Widget", open=False):
-            org_html = gr.Code(language="html", label="organization.html")
-            org_btn = gr.Button("Load Code")
-            org_btn.click(organization_widget, outputs=org_html)
+        # Pre-load widget code on startup to ensure MCP resources are registered
+        org_html = gr.Code(language="html", label="organization.html", value=organization_widget())
+        ai_html = gr.Code(language="html", label="ai-services.html", value=ai_services_widget())
+        comp_html = gr.Code(language="html", label="compliance.html", value=compliance_widget())
         
-        with gr.Accordion("AI Services Widget", open=False):
-            ai_html = gr.Code(language="html", label="ai-services.html")
-            ai_btn = gr.Button("Load Code")
-            ai_btn.click(ai_services_widget, outputs=ai_html)
+        # Also keep button handlers for refreshing
+        with gr.Row():
+            org_btn = gr.Button("🔄 Refresh Org Widget")
+            ai_btn = gr.Button("🔄 Refresh AI Widget")
+            comp_btn = gr.Button("🔄 Refresh Compliance Widget")
         
-        with gr.Accordion("Compliance Widget", open=False):
-            comp_html = gr.Code(language="html", label="compliance.html")
-            comp_btn = gr.Button("Load Code")
-            comp_btn.click(compliance_widget, outputs=comp_html)
+        org_btn.click(organization_widget, outputs=org_html)
+        ai_btn.click(ai_services_widget, outputs=ai_html)
+        comp_btn.click(compliance_widget, outputs=comp_html)
     
     with gr.Tab("ℹ️ About"):
         gr.Markdown("""

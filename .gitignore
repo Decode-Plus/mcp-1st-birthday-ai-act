@@ -52,3 +52,4 @@ yarn-error.log*
 
 # generated compliance documentation
 compliance-docs/
+/modal/__pycache__
