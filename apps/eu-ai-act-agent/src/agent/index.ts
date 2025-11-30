@@ -22,7 +22,7 @@ import { experimental_createMCPClient as createMCPClient } from "@ai-sdk/mcp";
 import { Experimental_StdioMCPTransport as StdioMCPTransport } from "@ai-sdk/mcp/mcp-stdio";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-import { SYSTEM_PROMPT, SYSTEM_PROMPT_GPT_OSS } from "./prompts.js";
+import { SYSTEM_PROMPT } from "./prompts.js";
 import { getModel, type ApiKeys } from "@eu-ai-act/mcp-server";
 
 // Re-export ApiKeys type for server.ts
@@ -38,14 +38,9 @@ export interface AgentConfig {
 }
 
 /**
- * Get the appropriate system prompt based on the model
- * GPT-OSS uses a shorter prompt to fit within context limits
+ * Get the system prompt for the agent
  */
-function getSystemPrompt(modelName: string): string {
-  if (modelName === "gpt-oss") {
-    console.log("[Agent] Using shorter system prompt for GPT-OSS");
-    return SYSTEM_PROMPT_GPT_OSS;
-  }
+function getSystemPrompt(): string {
   return SYSTEM_PROMPT;
 }
 
@@ -278,7 +273,26 @@ export function createAgent(config: AgentConfig) {
       const { client, tools } = await createMCPClientWithTools(apiKeys, modelName, tavilyApiKey);
 
       try {
-        const systemPrompt = getSystemPrompt(modelName);
+        const systemPrompt = getSystemPrompt();
+        const isGptOss = modelName.toLowerCase().includes("gpt-oss");
+        
+        // Build provider options based on model
+        // GPT-OSS (vLLM on Modal) doesn't support reasoningEffort parameter
+        const providerOptions = isGptOss ? {} : {
+          anthropic: {
+            thinking: { type: "enabled", budgetTokens: 2000 },  // Minimal thinking budget for Claude
+          },
+          openai: {
+            reasoningEffort: "low",  // Low reasoning effort for GPT - faster responses
+          },
+          google: {
+            thinkingConfig: {
+              thinkingLevel: "low",  // Low thinking for faster responses
+              includeThoughts: true,
+            },
+          },
+        };
+        
         const result = await generateText({
           model,
           messages: [
@@ -289,21 +303,7 @@ export function createAgent(config: AgentConfig) {
           tools: tools as any,
           // stop when at least three tools runned and response is generated
           stopWhen: stepCountIs(3),
-          // Reduce reasoning effort to prevent timeouts (LOW for speed)
-          providerOptions: {
-            anthropic: {
-              thinking: { type: "enabled", budgetTokens: 2000 },  // Minimal thinking budget for Claude
-            },
-            openai: {
-              reasoningEffort: "low",  // Low reasoning effort for GPT - faster responses
-            },
-            google: {
-              thinkingConfig: {
-                thinkingLevel: "low",  // Low thinking for faster responses
-                includeThoughts: true,
-              },
-            },
-          },
+          providerOptions,
         });
 
         // Output tool results with detailed information
@@ -410,7 +410,25 @@ export function createAgent(config: AgentConfig) {
      */
     async streamText(params: { messages: any[] }) {
       const { client, tools } = await createMCPClientWithTools(apiKeys, modelName, tavilyApiKey);
-      const systemPrompt = getSystemPrompt(modelName);
+      const systemPrompt = getSystemPrompt();
+      const isGptOss = modelName.toLowerCase().includes("gpt-oss");
+      
+      // Build provider options based on model
+      // GPT-OSS (vLLM on Modal) doesn't support reasoningEffort parameter
+      const providerOptions = isGptOss ? {} : {
+        anthropic: {
+          thinking: { type: "enabled", budgetTokens: 2000 },  // Minimal thinking budget for Claude
+        },
+        openai: {
+          reasoningEffort: "low",  // Low reasoning effort for GPT - faster responses
+        },
+        google: {
+          thinkingConfig: {
+            thinkingLevel: "low",  // Low thinking for faster responses
+            includeThoughts: true,
+          },
+        },
+      };
 
       const result = streamText({
         model,
@@ -422,21 +440,7 @@ export function createAgent(config: AgentConfig) {
         tools: tools as any,
         // Increase maxSteps to ensure all 3 tools + final response
         stopWhen: stepCountIs(3),
-        // Reduce reasoning effort to prevent timeouts (LOW for speed)
-        providerOptions: {
-          anthropic: {
-            thinking: { type: "enabled", budgetTokens: 2000 },  // Minimal thinking budget for Claude
-          },
-          openai: {
-            reasoningEffort: "low",  // Low reasoning effort for GPT - faster responses
-          },
-          google: {
-            thinkingConfig: {
-              thinkingLevel: "low",  // Low thinking for faster responses
-              includeThoughts: true,
-            },
-          },
-        },
+        providerOptions,
         // Log each step for debugging
         onStepFinish: async (step) => {
           // Output tool results with detailed information

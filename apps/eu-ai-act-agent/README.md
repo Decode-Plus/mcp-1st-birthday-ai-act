@@ -38,7 +38,8 @@ This submission showcases:
 - **Real-world Application** - Solving critical regulatory compliance challenges
 - **Production-ready Architecture** - Gradio UI + Express API + MCP Protocol
 
-**🔗 Demo & Showcase:** [www.legitima.ai/mcp-hackathon](https://www.legitima.ai/mcp-hackathon)  
+**🔗 Demo & Showcase:** [www.legitima.ai/mcp-hackathon](https://www.legitima.ai/mcp-hackathon)
+**📹 Video:** [Guiddes](https://app.guidde.com/share/playlists/2wXbDrSm2YY7YnWMJbftuu?origin=wywDANMIvNhPu9kYVOXCPpdFcya2)
 **📱 Social Media:** [LinkedIn Post 1](https://www.linkedin.com/posts/iordanis-sarafidis_mcp-1st-birthday-mcp-1st-birthday-activity-7400132272282144768-ZIir?utm_source=share&utm_medium=member_desktop&rcm=ACoAAB0ARLABGvUO6Q--hJP0cDG7h0LZT0-roLs)
 
 [LinkedIn Post 2](https://www.linkedin.com/posts/billdrosatos_mcp-1st-birthday-mcp-1st-birthday-activity-7400135422502252544-C5BS?utm_source=share&utm_medium=member_desktop&rcm=ACoAAB0ARLABGvUO6Q--hJP0cDG7h0LZT0-roLs)
