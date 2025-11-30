@@ -53,3 +53,4 @@ yarn-error.log*
 # generated compliance documentation
 compliance-docs/
 /modal/__pycache__
+modal/__pycache__/gpt_oss_inference.cpython-313.pyc

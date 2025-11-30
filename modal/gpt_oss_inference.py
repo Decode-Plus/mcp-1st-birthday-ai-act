@@ -78,7 +78,7 @@ MODEL_REVISION = "d666cf3b67006cf8227666739edf25164aaffdeb"
 # GPT-OSS 120B needs ~40-50GB VRAM
 
 # Choose your GPU - uncomment the one you want to use:
-GPU_CONFIG = "A10G"  # ~$0.76/hr - RECOMMENDED for budget (works with 20B)
+GPU_CONFIG = "A100-40GB"  # ~$0.76/hr - RECOMMENDED for budget (works with 20B)
 # GPU_CONFIG = "L4"     # ~$0.59/hr - Cheapest option (may be tight)
 # GPU_CONFIG = "A100"   # ~$1.79/hr - More headroom (40GB version)
 # GPU_CONFIG = "H100"   # ~$3.95/hr - Maximum performance
